@@ -91,10 +91,10 @@ export function DashboardChart({ dailyData }: DashboardChartProps) {
                     <div className="bg-background border rounded-lg shadow-lg p-3">
                       <p className="font-medium mb-2">{label}</p>
                       <p className="text-sm text-blue-600">
-                        Gross: €{payload[0]?.value?.toFixed(2)}
+                        Gross: €{Number(payload[0]?.value ?? 0).toFixed(2)}
                       </p>
                       <p className="text-sm text-green-600">
-                        Net: €{payload[1]?.value?.toFixed(2)}
+                        Net: €{Number(payload[1]?.value ?? 0).toFixed(2)}
                       </p>
                     </div>
                   );
