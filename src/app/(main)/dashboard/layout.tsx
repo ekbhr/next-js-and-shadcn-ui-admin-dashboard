@@ -39,14 +39,18 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
   // Get user data from session or use default
   const user = session?.user
     ? {
+        id: session.user.id || "1",
         name: session.user.name || "User",
         email: session.user.email || "",
         avatar: "",
+        role: "user",
       }
     : {
+        id: "guest",
         name: "Guest",
         email: "",
         avatar: "",
+        role: "guest",
       };
 
   const layoutPreferences = {
