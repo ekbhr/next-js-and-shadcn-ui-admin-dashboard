@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { AppSidebar } from "@/app/(main)/dashboard/_components/sidebar/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { users } from "@/data/users";
+import { auth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { getPreference } from "@/server/server-actions";
 import {
@@ -27,6 +27,7 @@ import { ThemeSwitcher } from "./_components/sidebar/theme-switcher";
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
+  const session = await auth();
 
   const [sidebarVariant, sidebarCollapsible, contentLayout, navbarStyle] = await Promise.all([
     getPreference<SidebarVariant>("sidebar_variant", SIDEBAR_VARIANT_VALUES, "inset"),
@@ -34,6 +35,19 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
     getPreference<ContentLayout>("content_layout", CONTENT_LAYOUT_VALUES, "centered"),
     getPreference<NavbarStyle>("navbar_style", NAVBAR_STYLE_VALUES, "scroll"),
   ]);
+
+  // Get user data from session or use default
+  const user = session?.user
+    ? {
+        name: session.user.name || "User",
+        email: session.user.email || "",
+        avatar: "",
+      }
+    : {
+        name: "Guest",
+        email: "",
+        avatar: "",
+      };
 
   const layoutPreferences = {
     contentLayout,
@@ -44,7 +58,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar variant={sidebarVariant} collapsible={sidebarCollapsible} />
+      <AppSidebar variant={sidebarVariant} collapsible={sidebarCollapsible} user={user} />
       <SidebarInset
         data-content-layout={contentLayout}
         className={cn(
@@ -71,7 +85,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
             <div className="flex items-center gap-2">
               <LayoutControls {...layoutPreferences} />
               <ThemeSwitcher />
-              <AccountSwitcher users={users} />
+              <AccountSwitcher users={[user]} />
             </div>
           </div>
         </header>

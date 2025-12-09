@@ -1,6 +1,8 @@
 "use client";
 
 import { EllipsisVertical, CircleUser, CreditCard, MessageSquareDot, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -25,6 +27,32 @@ export function NavUser({
   };
 }) {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+
+  const handleLogout = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    try {
+      // Use signOut with redirect: false to handle redirect manually
+      await signOut({ 
+        redirect: false
+      });
+      
+      // Clear the session and redirect
+      router.push("/login");
+      router.refresh();
+      
+      // Force a hard reload to clear any cached session data
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 100);
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Fallback: force redirect
+      window.location.href = "/login";
+    }
+  };
 
   return (
     <SidebarMenu>
@@ -80,7 +108,13 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem 
+              onSelect={(e) => {
+                e.preventDefault();
+                handleLogout();
+              }}
+              className="cursor-pointer"
+            >
               <LogOut />
               Log out
             </DropdownMenuItem>

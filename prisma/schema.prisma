@@ -1,0 +1,194 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// NextAuth.js required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?   // Hashed password for credentials provider
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  resetTokens   PasswordResetToken[]
+  
+  // Revenue & Reporting relations
+  sedoRevenue       Bidder_Sedo[]
+  domainAssignments Domain_Assignment[]
+  overviewReports   Overview_Report[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expires   DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// REVENUE DATA TABLES
+// ============================================
+
+// Sedo-specific revenue data with SubID support
+model Bidder_Sedo {
+  id            String   @id @default(cuid())
+  
+  // Core fields
+  date          DateTime // Reporting date
+  domain        String?  // Domain name
+  
+  // Sedo-specific SubIDs (for tracking)
+  c1            String?  // Sub ID 1
+  c2            String?  // Sub ID 2
+  c3            String?  // Sub ID 3
+  
+  // Revenue
+  grossRevenue  Float    // Total earnings from Sedo
+  netRevenue    Float    // After revshare deduction
+  revShare      Float    @default(80) // Partner's percentage
+  currency      String   @default("EUR")
+  
+  // Metrics
+  impressions   Int      // Unique visitors
+  clicks        Int
+  ctr           Float?   // Click-through rate
+  rpm           Float?   // Revenue per mille
+  
+  // Metadata
+  status        String?  // "Final" or "Estimated"
+  tag           String?  // Custom tag/label
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Multi-user support
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Unique constraint for upsert (prevents duplicates)
+  @@unique([date, domain, c1, c2, c3, userId])
+  @@index([date])
+  @@index([userId])
+  @@index([domain])
+}
+
+// Domain assignment & RevShare configuration
+model Domain_Assignment {
+  id            String   @id @default(cuid())
+  
+  // Assignment
+  userId        String
+  domain        String?  // null = default for all domains
+  network       String?  // null = default for all networks
+  
+  // RevShare
+  revShare      Float    // Partner's percentage (0-100)
+  
+  // Metadata
+  isActive      Boolean  @default(true)
+  notes         String?  // Admin notes
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Unique: One setting per domain-network-user combination
+  @@unique([userId, domain, network])
+  @@index([userId])
+  @@index([domain])
+  @@index([network])
+}
+
+// Aggregated overview from all ad networks
+model Overview_Report {
+  id            String   @id @default(cuid())
+  
+  // Core fields
+  date          DateTime
+  network       String   // "sedo", "yandex", "google"
+  domain        String?
+  
+  // Revenue (common fields)
+  grossRevenue  Float
+  netRevenue    Float
+  currency      String   @default("EUR")
+  
+  // Metrics (common fields)
+  impressions   Int
+  clicks        Int
+  ctr           Float?
+  rpm           Float?
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Multi-user support
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Unique constraint
+  @@unique([date, network, domain, userId])
+  @@index([date])
+  @@index([network])
+  @@index([userId])
+}

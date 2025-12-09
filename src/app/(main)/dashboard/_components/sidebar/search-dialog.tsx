@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
 
-import { LayoutDashboard, ChartBar, Gauge, ShoppingBag, GraduationCap, Forklift, Search } from "lucide-react";
+import { LayoutDashboard, PieChart, Globe, Settings, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,20 +16,16 @@ import {
 } from "@/components/ui/command";
 
 const searchItems = [
-  { group: "Dashboards", icon: LayoutDashboard, label: "Default" },
-  { group: "Dashboards", icon: ChartBar, label: "CRM", disabled: true },
-  { group: "Dashboards", icon: Gauge, label: "Analytics", disabled: true },
-  { group: "Dashboards", icon: ShoppingBag, label: "E-Commerce", disabled: true },
-  { group: "Dashboards", icon: GraduationCap, label: "Academy", disabled: true },
-  { group: "Dashboards", icon: Forklift, label: "Logistics", disabled: true },
-  { group: "Authentication", label: "Login v1" },
-  { group: "Authentication", label: "Login v2" },
-  { group: "Authentication", label: "Register v1" },
-  { group: "Authentication", label: "Register v2" },
+  { group: "Revenue", icon: LayoutDashboard, label: "Dashboard", url: "/dashboard" },
+  { group: "Revenue", icon: PieChart, label: "Overview", url: "/dashboard/overview" },
+  { group: "Admin", icon: Globe, label: "Domain Assignment", url: "/dashboard/admin/domains" },
+  { group: "Admin", icon: Settings, label: "Settings", url: "/dashboard/admin/settings" },
 ];
 
 export function SearchDialog() {
   const [open, setOpen] = React.useState(false);
+  const router = useRouter();
+
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
@@ -39,6 +36,11 @@ export function SearchDialog() {
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
+
+  const handleSelect = (url: string) => {
+    setOpen(false);
+    router.push(url);
+  };
 
   return (
     <>
@@ -54,7 +56,7 @@ export function SearchDialog() {
         </kbd>
       </Button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search dashboards, users, and more…" />
+        <CommandInput placeholder="Search pages..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           {[...new Set(searchItems.map((item) => item.group))].map((group, i) => (
@@ -64,8 +66,12 @@ export function SearchDialog() {
                 {searchItems
                   .filter((item) => item.group === group)
                   .map((item) => (
-                    <CommandItem className="!py-1.5" key={item.label} onSelect={() => setOpen(false)}>
-                      {item.icon && <item.icon />}
+                    <CommandItem 
+                      className="!py-1.5 cursor-pointer" 
+                      key={item.label} 
+                      onSelect={() => handleSelect(item.url)}
+                    >
+                      {item.icon && <item.icon className="mr-2 h-4 w-4" />}
                       <span>{item.label}</span>
                     </CommandItem>
                   ))}

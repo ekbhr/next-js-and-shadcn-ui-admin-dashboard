@@ -1,0 +1,602 @@
+/**
+ * Revenue Database Operations
+ * 
+ * Handles saving and retrieving revenue data from the database.
+ * Supports upsert logic (update if exists, insert if new).
+ */
+
+import { prisma } from "@/lib/prisma";
+import type { SedoRevenueData } from "@/lib/sedo";
+
+// Default revShare if no assignment found
+const DEFAULT_REV_SHARE = 80;
+
+/**
+ * Get revShare for a specific domain/network/user combination
+ * Priority: exact match > network default > user default > system default
+ */
+export async function getRevShare(
+  userId: string,
+  domain: string | null,
+  network: string
+): Promise<number> {
+  // 1. Try exact match (domain + network + user)
+  if (domain) {
+    const exactMatch = await prisma.domain_Assignment.findFirst({
+      where: { userId, domain, network, isActive: true },
+    });
+    if (exactMatch) return exactMatch.revShare;
+  }
+
+  // 2. Try network default (null domain + network + user)
+  const networkDefault = await prisma.domain_Assignment.findFirst({
+    where: { userId, domain: null, network, isActive: true },
+  });
+  if (networkDefault) return networkDefault.revShare;
+
+  // 3. Try user default (null domain + null network + user)
+  const userDefault = await prisma.domain_Assignment.findFirst({
+    where: { userId, domain: null, network: null, isActive: true },
+  });
+  if (userDefault) return userDefault.revShare;
+
+  // 4. System default
+  return DEFAULT_REV_SHARE;
+}
+
+/**
+ * Calculate net revenue from gross revenue and revShare
+ */
+export function calculateNetRevenue(grossRevenue: number, revShare: number): number {
+  return Math.round(grossRevenue * (revShare / 100) * 100) / 100;
+}
+
+/**
+ * Save Sedo revenue data to database (upsert)
+ * Updates if record exists, inserts if new
+ */
+export async function saveSedoRevenue(
+  data: SedoRevenueData[],
+  userId: string
+): Promise<{ saved: number; updated: number; errors: string[] }> {
+  let saved = 0;
+  let updated = 0;
+  const errors: string[] = [];
+
+  for (const item of data) {
+    try {
+      // Get revShare for this domain
+      const domainValue = item.domain || null;
+      const revShare = await getRevShare(userId, domainValue, "sedo");
+      const netRevenue = calculateNetRevenue(item.revenue, revShare);
+
+      // Parse date - ensure it's a valid date
+      const date = new Date(item.date);
+      date.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
+
+      // Data to save
+      const recordData = {
+        grossRevenue: item.revenue,
+        netRevenue,
+        revShare,
+        impressions: item.impressions || item.uniques || 0,
+        clicks: item.clicks || 0,
+        ctr: item.ctr || null,
+        rpm: item.rpm || null,
+        status: "Estimated",
+      };
+
+      // Find existing record manually (Prisma has issues with null in compound unique where)
+      const existing = await prisma.bidder_Sedo.findFirst({
+        where: {
+          date,
+          domain: domainValue,
+          c1: null,
+          c2: null,
+          c3: null,
+          userId,
+        },
+      });
+
+      if (existing) {
+        // Update existing record
+        await prisma.bidder_Sedo.update({
+          where: { id: existing.id },
+          data: recordData,
+        });
+        updated++;
+      } else {
+        // Create new record
+        await prisma.bidder_Sedo.create({
+          data: {
+            date,
+            domain: domainValue,
+            c1: null,
+            c2: null,
+            c3: null,
+            currency: "EUR",
+            userId,
+            ...recordData,
+          },
+        });
+        saved++;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Failed to save ${item.date}: ${errorMsg}`);
+      console.error(`[Revenue DB] Error saving ${item.date}:`, error);
+    }
+  }
+
+  console.log(`[Revenue DB] Sedo data saved: ${saved} new, ${updated} updated, ${errors.length} errors`);
+  
+  return { saved, updated, errors };
+}
+
+/**
+ * Get Sedo revenue data from database
+ */
+export async function getSedoRevenue(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+    domain?: string;
+    limit?: number;
+  } = {}
+) {
+  const { startDate, endDate, domain, limit } = options;
+
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  if (domain) {
+    where.domain = domain;
+  }
+
+  const data = await prisma.bidder_Sedo.findMany({
+    where,
+    orderBy: { date: "asc" },
+    take: limit,
+  });
+
+  return data;
+}
+
+/**
+ * Get aggregated revenue summary
+ */
+export async function getSedoRevenueSummary(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+  } = {}
+) {
+  const { startDate, endDate } = options;
+
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  const result = await prisma.bidder_Sedo.aggregate({
+    where,
+    _sum: {
+      grossRevenue: true,
+      netRevenue: true,
+      impressions: true,
+      clicks: true,
+    },
+    _count: true,
+  });
+
+  return {
+    totalGrossRevenue: result._sum.grossRevenue || 0,
+    totalNetRevenue: result._sum.netRevenue || 0,
+    totalImpressions: result._sum.impressions || 0,
+    totalClicks: result._sum.clicks || 0,
+    recordCount: result._count,
+  };
+}
+
+/**
+ * Create or update domain assignment (revShare settings)
+ */
+export async function setDomainAssignment(
+  userId: string,
+  domain: string | null,
+  network: string | null,
+  revShare: number,
+  notes?: string
+) {
+  return prisma.domain_Assignment.upsert({
+    where: {
+      userId_domain_network: {
+        userId,
+        domain,
+        network,
+      },
+    },
+    update: {
+      revShare,
+      notes,
+      isActive: true,
+    },
+    create: {
+      userId,
+      domain,
+      network,
+      revShare,
+      notes,
+      isActive: true,
+    },
+  });
+}
+
+/**
+ * Get all domain assignments for a user
+ */
+export async function getDomainAssignments(userId: string) {
+  return prisma.domain_Assignment.findMany({
+    where: { userId, isActive: true },
+    orderBy: [{ domain: "asc" }, { network: "asc" }],
+  });
+}
+
+/**
+ * Sync domains from Sedo to Domain_Assignment table
+ * Creates assignments with default revShare if they don't exist
+ */
+export async function syncDomainsToAssignment(
+  userId: string,
+  domains: Array<{ domain: string; revenue?: number; clicks?: number; impressions?: number }>,
+  network: string = "sedo",
+  defaultRevShare: number = 80
+): Promise<{ created: number; existing: number; errors: string[] }> {
+  let created = 0;
+  let existing = 0;
+  const errors: string[] = [];
+
+  for (const item of domains) {
+    if (!item.domain || item.domain.trim() === "") continue;
+
+    try {
+      const domain = item.domain.trim().toLowerCase();
+
+      // Check if assignment already exists
+      const existingAssignment = await prisma.domain_Assignment.findFirst({
+        where: { userId, domain, network },
+      });
+
+      if (existingAssignment) {
+        existing++;
+      } else {
+        // Create new assignment with default revShare
+        await prisma.domain_Assignment.create({
+          data: {
+            userId,
+            domain,
+            network,
+            revShare: defaultRevShare,
+            isActive: true,
+            notes: `Auto-created from ${network} sync`,
+          },
+        });
+        created++;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Failed to sync domain ${item.domain}: ${errorMsg}`);
+      console.error(`[Domain Sync] Error:`, error);
+    }
+  }
+
+  console.log(`[Domain Sync] ${network}: ${created} created, ${existing} existing, ${errors.length} errors`);
+  return { created, existing, errors };
+}
+
+/**
+ * Sync Bidder_Sedo data to Overview_Report for a user
+ * Aggregates by date, network, domain
+ */
+export async function syncToOverviewReport(userId: string): Promise<{ synced: number; errors: string[] }> {
+  let synced = 0;
+  const errors: string[] = [];
+
+  try {
+    // Get all Sedo data for this user
+    const sedoData = await prisma.bidder_Sedo.findMany({
+      where: { userId },
+    });
+
+    // Group by date + domain for Overview
+    const grouped = new Map<string, {
+      date: Date;
+      domain: string | null;
+      grossRevenue: number;
+      netRevenue: number;
+      impressions: number;
+      clicks: number;
+    }>();
+
+    for (const record of sedoData) {
+      const key = `${record.date.toISOString().split('T')[0]}_${record.domain || 'all'}`;
+      
+      if (grouped.has(key)) {
+        const existing = grouped.get(key)!;
+        existing.grossRevenue += record.grossRevenue;
+        existing.netRevenue += record.netRevenue;
+        existing.impressions += record.impressions;
+        existing.clicks += record.clicks;
+      } else {
+        grouped.set(key, {
+          date: record.date,
+          domain: record.domain,
+          grossRevenue: record.grossRevenue,
+          netRevenue: record.netRevenue,
+          impressions: record.impressions,
+          clicks: record.clicks,
+        });
+      }
+    }
+
+    // Save to Overview_Report (using findFirst + update/create to handle null domains)
+    for (const [, data] of grouped) {
+      try {
+        const ctr = data.impressions > 0 
+          ? Math.round((data.clicks / data.impressions) * 10000) / 100 
+          : null;
+        const rpm = data.impressions > 0 
+          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100 
+          : null;
+
+        const recordData = {
+          grossRevenue: data.grossRevenue,
+          netRevenue: data.netRevenue,
+          impressions: data.impressions,
+          clicks: data.clicks,
+          ctr,
+          rpm,
+        };
+
+        // Find existing record manually (Prisma has issues with null in compound unique where)
+        const existing = await prisma.overview_Report.findFirst({
+          where: {
+            date: data.date,
+            network: "sedo",
+            domain: data.domain,
+            userId,
+          },
+        });
+
+        if (existing) {
+          await prisma.overview_Report.update({
+            where: { id: existing.id },
+            data: recordData,
+          });
+        } else {
+          await prisma.overview_Report.create({
+            data: {
+              date: data.date,
+              network: "sedo",
+              domain: data.domain,
+              currency: "EUR",
+              userId,
+              ...recordData,
+            },
+          });
+        }
+        synced++;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
+      }
+    }
+
+    console.log(`[Overview Sync] User ${userId}: ${synced} records synced, ${errors.length} errors`);
+  } catch (error) {
+    console.error("[Overview Sync] Error:", error);
+    errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return { synced, errors };
+}
+
+/**
+ * Get Overview Report data for a user
+ */
+export async function getOverviewReport(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+    network?: string;
+    domain?: string;
+    limit?: number;
+  } = {}
+) {
+  const { startDate, endDate, network, domain, limit } = options;
+
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  if (network) where.network = network;
+  if (domain) where.domain = domain;
+
+  const data = await prisma.overview_Report.findMany({
+    where,
+    orderBy: { date: "desc" },
+    take: limit,
+  });
+
+  // Calculate summary
+  const summary = {
+    totalGrossRevenue: 0,
+    totalNetRevenue: 0,
+    totalImpressions: 0,
+    totalClicks: 0,
+    avgCtr: 0,
+    avgRpm: 0,
+  };
+
+  for (const record of data) {
+    summary.totalGrossRevenue += record.grossRevenue;
+    summary.totalNetRevenue += record.netRevenue;
+    summary.totalImpressions += record.impressions;
+    summary.totalClicks += record.clicks;
+  }
+
+  if (summary.totalImpressions > 0) {
+    summary.avgCtr = Math.round((summary.totalClicks / summary.totalImpressions) * 10000) / 100;
+    summary.avgRpm = Math.round((summary.totalGrossRevenue / summary.totalImpressions) * 1000 * 100) / 100;
+  }
+
+  return { data, summary };
+}
+
+/**
+ * Get dashboard summary data (aggregated by date, not network)
+ */
+export async function getDashboardSummary(
+  userId: string,
+  period: "current" | "last" = "current"
+) {
+  // Calculate date range
+  const now = new Date();
+  let startDate: Date;
+  let endDate: Date;
+
+  if (period === "current") {
+    // Current month: 1st of this month to today
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    endDate = now;
+  } else {
+    // Last month: 1st to last day of previous month
+    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    endDate = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of previous month
+  }
+
+  // Get all data for the period
+  const data = await prisma.overview_Report.findMany({
+    where: {
+      userId,
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    orderBy: { date: "asc" },
+  });
+
+  // Aggregate by date (combine all networks)
+  const dailyMap = new Map<string, {
+    date: string;
+    grossRevenue: number;
+    netRevenue: number;
+    impressions: number;
+    clicks: number;
+  }>();
+
+  for (const record of data) {
+    const dateKey = record.date.toISOString().split("T")[0];
+    const existing = dailyMap.get(dateKey);
+
+    if (existing) {
+      existing.grossRevenue += record.grossRevenue;
+      existing.netRevenue += record.netRevenue;
+      existing.impressions += record.impressions;
+      existing.clicks += record.clicks;
+    } else {
+      dailyMap.set(dateKey, {
+        date: dateKey,
+        grossRevenue: record.grossRevenue,
+        netRevenue: record.netRevenue,
+        impressions: record.impressions,
+        clicks: record.clicks,
+      });
+    }
+  }
+
+  const dailyData = Array.from(dailyMap.values()).sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // Calculate totals
+  const totals = {
+    grossRevenue: 0,
+    netRevenue: 0,
+    impressions: 0,
+    clicks: 0,
+  };
+
+  for (const day of dailyData) {
+    totals.grossRevenue += day.grossRevenue;
+    totals.netRevenue += day.netRevenue;
+    totals.impressions += day.impressions;
+    totals.clicks += day.clicks;
+  }
+
+  // Get top domains
+  const domainMap = new Map<string, {
+    domain: string;
+    grossRevenue: number;
+    netRevenue: number;
+  }>();
+
+  for (const record of data) {
+    const domain = record.domain || "All Domains";
+    const existing = domainMap.get(domain);
+
+    if (existing) {
+      existing.grossRevenue += record.grossRevenue;
+      existing.netRevenue += record.netRevenue;
+    } else {
+      domainMap.set(domain, {
+        domain,
+        grossRevenue: record.grossRevenue,
+        netRevenue: record.netRevenue,
+      });
+    }
+  }
+
+  const topDomains = Array.from(domainMap.values())
+    .sort((a, b) => b.grossRevenue - a.grossRevenue)
+    .slice(0, 5);
+
+  return {
+    period,
+    dateRange: {
+      start: startDate.toISOString().split("T")[0],
+      end: endDate.toISOString().split("T")[0],
+    },
+    totals: {
+      grossRevenue: Math.round(totals.grossRevenue * 100) / 100,
+      netRevenue: Math.round(totals.netRevenue * 100) / 100,
+      impressions: totals.impressions,
+      clicks: totals.clicks,
+      ctr: totals.impressions > 0 
+        ? Math.round((totals.clicks / totals.impressions) * 10000) / 100 
+        : 0,
+      rpm: totals.impressions > 0 
+        ? Math.round((totals.grossRevenue / totals.impressions) * 1000 * 100) / 100 
+        : 0,
+    },
+    dailyData,
+    topDomains,
+  };
+}
+
