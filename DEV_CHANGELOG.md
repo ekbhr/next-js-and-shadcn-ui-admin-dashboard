@@ -8,17 +8,42 @@ This file tracks all development changes and updates to the RevEngine Reporting 
 
 ## [Unreleased]
 
-### 2025-12-09 - Critical Security Update (CVE-2025-55182)
+### 2025-12-09 - Critical Security Update & Prisma 7 Migration
 
 #### Security Fix
-- **Next.js upgraded from 16.0.3 to 16.0.7** - Critical RCE vulnerability patch
+- **Next.js upgraded from 16.0.3 to 16.0.8** - Critical RCE vulnerability patch
   - CVE-2025-55182 (React2Shell) - Remote Code Execution vulnerability in React Server Components
   - Public exploits are available; immediate upgrade required
-  - Also updated `eslint-config-next` to 16.0.7 for compatibility
+  - Also updated `eslint-config-next` to 16.0.8 for compatibility
+
+#### Prisma 7 Migration
+- **Added `@prisma/adapter-pg` and `pg` packages** for direct database connections
+  - Prisma 7 "client" engine requires either Accelerate URL or database adapter
+  - Using pg adapter allows direct PostgreSQL connections without Prisma Accelerate
+- **Updated `src/lib/prisma.ts`** to use pg adapter with connection pooling
+- **Updated `prisma/schema.prisma`** to use `prisma-client-js` provider with custom output
+
+#### TypeScript Fixes
+- **Fixed NextAuth v5 types** in `src/lib/auth.ts`
+  - Changed `NextAuthOptions` to `NextAuthConfig`
+  - Fixed credentials type casting
+- **Fixed dashboard layout** - Added `id` and `role` to user object for AccountSwitcher
+- **Fixed dashboard chart** - Type-safe tooltip values with `Number()` wrapper
+
+#### Build Configuration
+- **Updated `package.json`** build script: `prisma generate && next build`
+- **Added `postinstall` hook** for automatic Prisma client generation
+
+#### Dependencies Added
+```json
+"@prisma/adapter-pg": "latest",
+"pg": "latest"
+```
 
 #### Action Required
-- Run `npm install` to update dependencies
-- Redeploy application with the patched version
+- Run `npm install` to install new dependencies
+- Ensure `DATABASE_URL` or `POSTGRES_URL` is set in environment
+- Add all env variables to Vercel for production deployment
 
 ---
 
