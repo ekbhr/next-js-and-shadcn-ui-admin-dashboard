@@ -5,7 +5,12 @@
  * No charts or summary cards - just the raw data.
  */
 
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "RevEngine Media - Overview Report",
+};
 import { redirect } from "next/navigation";
 import { getOverviewReport } from "@/lib/revenue-db";
 import { RevenueDataTable } from "./_components/revenue-data-table";

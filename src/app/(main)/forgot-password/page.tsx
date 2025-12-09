@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Command } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "RevEngine Media - Forgot Password",
+};
 
 import { ForgotPasswordForm } from "../auth/_components/forgot-password-form";
 

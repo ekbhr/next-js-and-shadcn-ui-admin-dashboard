@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Command } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "RevEngine Media - Login",
+};
 
 import { LoginForm } from "../auth/_components/login-form";
 import { GoogleButton } from "../auth/_components/social-auth/google-button";

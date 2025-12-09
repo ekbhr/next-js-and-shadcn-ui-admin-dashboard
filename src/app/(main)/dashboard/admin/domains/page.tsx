@@ -4,7 +4,12 @@
  * Allows admins to view and edit revShare settings per domain.
  */
 
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "RevEngine Media - Domain Management",
+};
 import { redirect } from "next/navigation";
 import { getDomainAssignments } from "@/lib/revenue-db";
 import { DomainTable } from "./_components/domain-table";

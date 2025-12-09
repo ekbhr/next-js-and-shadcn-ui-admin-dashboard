@@ -5,7 +5,12 @@
  * All networks combined (no grouping by network).
  */
 
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "RevEngine Media - Dashboard",
+};
 import { redirect } from "next/navigation";
 import { getDashboardSummary } from "@/lib/revenue-db";
 import { DashboardCards } from "./_components/dashboard-cards";
