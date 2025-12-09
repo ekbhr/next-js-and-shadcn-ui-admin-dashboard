@@ -63,20 +63,26 @@ export const authOptions: NextAuthConfig = {
     async signIn({ user, account }) {
       // For Google OAuth, create user if doesn't exist
       if (account?.provider === "google" && user.email) {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        });
-
-        if (!existingUser) {
-          // Create new user for Google OAuth
-          await prisma.user.create({
-            data: {
-              email: user.email,
-              name: user.name,
-              image: user.image,
-              emailVerified: new Date(),
-            },
+        try {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
           });
+
+          if (!existingUser) {
+            // Create new user for Google OAuth
+            await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                emailVerified: new Date(),
+              },
+            });
+          }
+        } catch (error) {
+          console.error("Error in signIn callback:", error);
+          // Still allow sign in even if DB operation fails
+          // The jwt callback will handle fetching/creating user
         }
       }
       return true;
@@ -85,11 +91,28 @@ export const authOptions: NextAuthConfig = {
       if (user) {
         // For Google OAuth, fetch the user ID from database
         if (account?.provider === "google" && user.email) {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: user.email },
-          });
-          if (dbUser) {
+          try {
+            let dbUser = await prisma.user.findUnique({
+              where: { email: user.email },
+            });
+            
+            // Create user if doesn't exist (fallback)
+            if (!dbUser) {
+              dbUser = await prisma.user.create({
+                data: {
+                  email: user.email,
+                  name: user.name,
+                  image: user.image,
+                  emailVerified: new Date(),
+                },
+              });
+            }
+            
             token.id = dbUser.id;
+          } catch (error) {
+            console.error("Error in jwt callback:", error);
+            // Use a temporary ID if database fails
+            token.id = user.id || user.email;
           }
         } else {
           token.id = user.id;
