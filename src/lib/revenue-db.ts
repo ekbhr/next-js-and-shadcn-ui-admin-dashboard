@@ -218,20 +218,28 @@ export async function setDomainAssignment(
   revShare: number,
   notes?: string
 ) {
-  return prisma.domain_Assignment.upsert({
+  // Use findFirst + create/update pattern for nullable composite keys
+  const existing = await prisma.domain_Assignment.findFirst({
     where: {
-      userId_domain_network: {
-        userId,
-        domain,
-        network,
+      userId,
+      domain,
+      network,
+    },
+  });
+
+  if (existing) {
+    return prisma.domain_Assignment.update({
+      where: { id: existing.id },
+      data: {
+        revShare,
+        notes,
+        isActive: true,
       },
-    },
-    update: {
-      revShare,
-      notes,
-      isActive: true,
-    },
-    create: {
+    });
+  }
+
+  return prisma.domain_Assignment.create({
+    data: {
       userId,
       domain,
       network,
