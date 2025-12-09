@@ -92,6 +92,7 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
+            {/* TODO: Uncomment when these features are implemented
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
@@ -107,6 +108,7 @@ export function NavUser({
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
+            */}
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onSelect={(e) => {

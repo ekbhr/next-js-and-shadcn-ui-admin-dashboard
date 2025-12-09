@@ -55,6 +55,7 @@ export function AccountSwitcher({
             </div>
           </DropdownMenuItem>
         ))}
+        {/* TODO: Uncomment when these features are implemented
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem>
@@ -70,6 +71,7 @@ export function AccountSwitcher({
             Notifications
           </DropdownMenuItem>
         </DropdownMenuGroup>
+        */}
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <LogOut />
