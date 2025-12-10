@@ -261,10 +261,13 @@ class SedoClient {
    * 
    * Period values:
    * 0 = One day (requires date)
-   * 1 = Last 31 days (day by day summary)
+   * 1 = Last 31 days (day by day summary) - NOTE: domain field is empty!
    * 2 = One month (requires date)
    * 3 = Last 12 months
-   * 4 = Last 31 days (domain summary)
+   * 4 = Last 31 days (domain summary) - NOTE: date field is empty!
+   * 
+   * To get both domain AND date, we fetch period=4 first to get domains,
+   * then fetch period=1 for each domain individually.
    */
   async getRevenueData(
     params: SedoReportParams = {},
@@ -283,66 +286,13 @@ class SedoClient {
     }
 
     try {
-      // Use period=1 for last 31 days day-by-day summary (no date required)
-      // final=false to include estimated data (today/yesterday)
-      // final=true would only return confirmed data (48+ hours old)
-      const result = await this.makeApiRequest("DomainParkingFinalStatistics", {
-        period: 1, // Last 31 days as day by day summary
-        final: false, // Include estimated/recent data (not just final)
-        domain: params.domain,
-        startfrom: 0,
-        results: 0, // 0 means all results for period 1
-      });
-
-      if (!result.success) {
-        console.error(`[Sedo API] Error: ${result.error}`);
-        return {
-          success: false,
-          error: result.error,
-        };
+      // If a specific domain is requested, fetch just that domain's daily data
+      if (params.domain) {
+        return this.getRevenueDataForDomain(params.domain);
       }
 
-      if (result.items.length === 0) {
-        console.warn("[Sedo API] No data returned from API");
-        return {
-          success: true,
-          data: [],
-          totalRevenue: 0,
-          totalClicks: 0,
-          totalImpressions: 0,
-          totalUniques: 0,
-          dateRange: { 
-            start: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], 
-            end: new Date().toISOString().split("T")[0] 
-          },
-        };
-      }
-
-      const data = this.transformToRevenueData(result.items);
-
-      // Sort by date (oldest first)
-      data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Calculate totals
-      const totalRevenue = data.reduce((sum, d) => sum + d.revenue, 0);
-      const totalClicks = data.reduce((sum, d) => sum + (d.clicks || 0), 0);
-      const totalImpressions = data.reduce((sum, d) => sum + (d.impressions || 0), 0);
-      const totalUniques = data.reduce((sum, d) => sum + (d.uniques || 0), 0);
-
-      // Calculate date range from data
-      const dates = data.map(d => d.date).sort();
-      const startDate = dates[0] || new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      const endDate = dates[dates.length - 1] || new Date().toISOString().split("T")[0];
-
-      return {
-        success: true,
-        data,
-        totalRevenue: Math.round(totalRevenue * 100) / 100,
-        totalClicks,
-        totalImpressions,
-        totalUniques,
-        dateRange: { start: startDate, end: endDate },
-      };
+      // Otherwise, fetch all domains and their daily data
+      return this.getRevenueDataWithDomains();
     } catch (error) {
       console.error("[Sedo API] Error:", error);
       return {
@@ -350,6 +300,143 @@ class SedoClient {
         error: error instanceof Error ? error.message : "Failed to fetch Sedo data",
       };
     }
+  }
+
+  /**
+   * Fetch daily revenue data for a specific domain
+   */
+  private async getRevenueDataForDomain(domain: string): Promise<SedoReportResponse> {
+    const result = await this.makeApiRequest("DomainParkingFinalStatistics", {
+      period: 1, // Last 31 days day by day
+      final: false,
+      domain: domain,
+      startfrom: 0,
+      results: 0,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    const data = this.transformToRevenueData(result.items);
+    // Add domain to each record since period=1 returns empty domain
+    data.forEach(d => d.domain = domain);
+
+    return this.buildRevenueResponse(data);
+  }
+
+  /**
+   * Fetch revenue data for ALL domains with date breakdown
+   * 1. First fetch domain list (period=4)
+   * 2. Then fetch daily data for each domain (period=1 with domain param)
+   */
+  private async getRevenueDataWithDomains(): Promise<SedoReportResponse> {
+    console.log("[Sedo API] Fetching domains first (period=4)...");
+    
+    // Step 1: Get list of domains
+    const domainsResult = await this.getDomains();
+    if (!domainsResult.success || domainsResult.domains.length === 0) {
+      console.warn("[Sedo API] No domains found, falling back to aggregate data");
+      return this.getAggregateRevenueData();
+    }
+
+    console.log(`[Sedo API] Found ${domainsResult.domains.length} domains, fetching daily data...`);
+    
+    // Step 2: Fetch daily data for each domain
+    const allData: SedoRevenueData[] = [];
+    
+    for (const domainInfo of domainsResult.domains) {
+      try {
+        console.log(`[Sedo API] Fetching data for: ${domainInfo.domain}`);
+        const domainResult = await this.makeApiRequest("DomainParkingFinalStatistics", {
+          period: 1, // Day by day
+          final: false,
+          domain: domainInfo.domain,
+          startfrom: 0,
+          results: 0,
+        });
+
+        if (domainResult.success && domainResult.items.length > 0) {
+          const domainData = this.transformToRevenueData(domainResult.items);
+          // Add domain name to each record
+          domainData.forEach(d => d.domain = domainInfo.domain);
+          allData.push(...domainData);
+        }
+      } catch (error) {
+        console.error(`[Sedo API] Error fetching ${domainInfo.domain}:`, error);
+      }
+    }
+
+    if (allData.length === 0) {
+      console.warn("[Sedo API] No daily data found for any domain");
+      return this.getAggregateRevenueData();
+    }
+
+    console.log(`[Sedo API] Total records fetched: ${allData.length}`);
+    return this.buildRevenueResponse(allData);
+  }
+
+  /**
+   * Fallback: Get aggregate revenue data (no domain breakdown)
+   */
+  private async getAggregateRevenueData(): Promise<SedoReportResponse> {
+    const result = await this.makeApiRequest("DomainParkingFinalStatistics", {
+      period: 1,
+      final: false,
+      startfrom: 0,
+      results: 0,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    const data = this.transformToRevenueData(result.items);
+    return this.buildRevenueResponse(data);
+  }
+
+  /**
+   * Build standard response from revenue data
+   */
+  private buildRevenueResponse(data: SedoRevenueData[]): SedoReportResponse {
+    if (data.length === 0) {
+      return {
+        success: true,
+        data: [],
+        totalRevenue: 0,
+        totalClicks: 0,
+        totalImpressions: 0,
+        totalUniques: 0,
+        dateRange: {
+          start: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          end: new Date().toISOString().split("T")[0],
+        },
+      };
+    }
+
+    // Sort by date
+    data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Calculate totals
+    const totalRevenue = data.reduce((sum, d) => sum + d.revenue, 0);
+    const totalClicks = data.reduce((sum, d) => sum + (d.clicks || 0), 0);
+    const totalImpressions = data.reduce((sum, d) => sum + (d.impressions || 0), 0);
+    const totalUniques = data.reduce((sum, d) => sum + (d.uniques || 0), 0);
+
+    // Calculate date range
+    const dates = data.map(d => d.date).sort();
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+
+    return {
+      success: true,
+      data,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalClicks,
+      totalImpressions,
+      totalUniques,
+      dateRange: { start: startDate, end: endDate },
+    };
   }
 
   /**
