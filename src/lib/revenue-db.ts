@@ -240,15 +240,14 @@ export async function getSedoRevenueSummary(
  */
 export async function setDomainAssignment(
   userId: string,
-  domain: string | null,
-  network: string | null,
+  domain: string,
+  network: string = "sedo",
   revShare: number,
   notes?: string
 ) {
-  // Use findFirst + create/update pattern for nullable composite keys
+  // Use findFirst + create/update pattern
   const existing = await prisma.domain_Assignment.findFirst({
     where: {
-      userId,
       domain,
       network,
     },
@@ -258,6 +257,7 @@ export async function setDomainAssignment(
     return prisma.domain_Assignment.update({
       where: { id: existing.id },
       data: {
+        userId, // Can reassign to different user
         revShare,
         notes,
         isActive: true,
