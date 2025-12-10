@@ -3,6 +3,7 @@ import {
   PieChart,
   Globe,
   Settings,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,12 @@ export const sidebarItems: NavGroup[] = [
     label: "Admin",
     adminOnly: true, // Only visible to admin users
     items: [
+      {
+        title: "User Management",
+        url: "/dashboard/admin/users",
+        icon: Users,
+        adminOnly: true,
+      },
       {
         title: "Domain Assignment",
         url: "/dashboard/admin/domains",
