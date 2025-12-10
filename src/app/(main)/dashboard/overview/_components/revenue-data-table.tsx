@@ -290,19 +290,20 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
       domain: row.original.domain || "All Domains",
     }));
 
-    const exportColumns = [
-      { key: "date" as const, header: "Date" },
-      { key: "network" as const, header: "Network" },
-      { key: "domain" as const, header: "Domain" },
-      { key: "impressions" as const, header: "Impressions" },
-      { key: "clicks" as const, header: "Clicks" },
-      { key: "ctr" as const, header: "CTR %" },
+    type ExportColumn = { key: keyof typeof filteredData[0]; header: string };
+    const exportColumns: ExportColumn[] = [
+      { key: "date", header: "Date" },
+      { key: "network", header: "Network" },
+      { key: "domain", header: "Domain" },
+      { key: "impressions", header: "Impressions" },
+      { key: "clicks", header: "Clicks" },
+      { key: "ctr", header: "CTR %" },
     ];
 
     if (showGrossRevenue) {
-      exportColumns.push({ key: "grossRevenue" as const, header: "Gross Revenue (EUR)" });
+      exportColumns.push({ key: "grossRevenue", header: "Gross Revenue (EUR)" });
     }
-    exportColumns.push({ key: "netRevenue" as const, header: "Net Revenue (EUR)" });
+    exportColumns.push({ key: "netRevenue", header: "Net Revenue (EUR)" });
 
     exportToCSV(filteredData, exportColumns, `revenue-overview-${new Date().toISOString().split("T")[0]}`);
   };
