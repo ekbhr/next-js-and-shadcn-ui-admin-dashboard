@@ -38,7 +38,6 @@ export async function GET() {
     // Get all domain assignments with user info
     const assignments = await prisma.domain_Assignment.findMany({
       where: {
-        domain: { not: null }, // Only specific domains, not defaults
         isActive: true,
       },
       include: {

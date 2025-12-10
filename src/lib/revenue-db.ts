@@ -313,7 +313,6 @@ export async function getUserAssignedDomains(
       userId,
       network,
       isActive: true,
-      domain: { not: null }, // Only get specific domain assignments, not defaults
     },
     select: { domain: true },
   });
