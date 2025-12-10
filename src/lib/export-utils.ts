@@ -7,7 +7,7 @@
 /**
  * Convert data array to CSV string
  */
-export function convertToCSV<T extends Record<string, unknown>>(
+export function convertToCSV<T>(
   data: T[],
   columns: { key: keyof T; header: string }[]
 ): string {
@@ -56,7 +56,7 @@ export function downloadCSV(csvContent: string, filename: string): void {
 /**
  * Export data to CSV and trigger download
  */
-export function exportToCSV<T extends Record<string, unknown>>(
+export function exportToCSV<T>(
   data: T[],
   columns: { key: keyof T; header: string }[],
   filename: string
