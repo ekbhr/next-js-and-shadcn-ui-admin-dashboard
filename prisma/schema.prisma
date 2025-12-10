@@ -49,6 +49,7 @@ model User {
   password      String?   // Hashed password for credentials provider
   image         String?
   role          String    @default("user") // "admin" or "user"
+  isActive      Boolean   @default(true)   // Can be deactivated by admin
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
@@ -130,13 +131,14 @@ model Bidder_Sedo {
 }
 
 // Domain assignment & RevShare configuration
+// One domain can only be assigned to ONE user
 model Domain_Assignment {
   id            String   @id @default(cuid())
   
   // Assignment
-  userId        String
-  domain        String?  // null = default for all domains
-  network       String?  // null = default for all networks
+  userId        String   // The user who owns this domain
+  domain        String   // Domain name (required, no null)
+  network       String   @default("sedo") // Network source
   
   // RevShare
   revShare      Float    // Partner's percentage (0-100)
@@ -152,8 +154,8 @@ model Domain_Assignment {
   // Relations
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Unique: One setting per domain-network-user combination
-  @@unique([userId, domain, network])
+  // Unique: One domain can only be assigned to ONE user per network
+  @@unique([domain, network])
   @@index([userId])
   @@index([domain])
   @@index([network])
