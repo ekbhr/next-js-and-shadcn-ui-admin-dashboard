@@ -163,9 +163,9 @@ PRISMA_DATABASE_URL=your-prisma-accelerate-url (optional, for Prisma Accelerate)
 
 # Email (for password reset) - Using Resend
 RESEND_API_KEY=re_your_resend_api_key_here
-EMAIL_FROM=noreply@ekbhr.com
-# Note: Domain ekbhr.com is verified in Resend
-# Use any email address from the verified domain (e.g., noreply@ekbhr.com, info@ekbhr.com)
+EMAIL_FROM=info@revengine.media
+# Note: Domain revengine.media is verified in Resend
+# Use any email address from the verified domain (e.g., info@revengine.media)
 # Get your API key from: https://resend.com/api-keys
 # Verify domains at: https://resend.com/domains
 ```

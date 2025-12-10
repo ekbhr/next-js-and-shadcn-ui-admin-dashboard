@@ -224,7 +224,7 @@ DATABASE_URL=your-database-url
 
 # Email
 RESEND_API_KEY=your-resend-api-key
-EMAIL_FROM=noreply@ekbhr.com
+EMAIL_FROM=info@revengine.media
 ```
 
 ---

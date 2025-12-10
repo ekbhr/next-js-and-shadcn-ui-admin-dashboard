@@ -21,8 +21,8 @@ export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
   try {
     // Use Resend's test domain by default (works without domain verification)
     // For production, verify your domain in Resend and set EMAIL_FROM to your verified domain
-    // Domain ekbhr.com is verified - use: noreply@ekbhr.com
-    const from = process.env.EMAIL_FROM || "onboarding@resend.dev";
+    // Domain revengine.media is verified - use: info@revengine.media
+    const from = process.env.EMAIL_FROM || "info@revengine.media";
     
     console.log("Sending email via Resend:", {
       from,
