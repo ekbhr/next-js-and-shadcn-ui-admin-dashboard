@@ -12,35 +12,23 @@ import type { SedoRevenueData } from "@/lib/sedo";
 const DEFAULT_REV_SHARE = 80;
 
 /**
- * Get revShare for a specific domain/network/user combination
- * Priority: exact match > network default > user default > system default
+ * Get revShare for a specific domain/network combination
+ * Since domain is now required, we only check for exact match or use default
  */
 export async function getRevShare(
   userId: string,
   domain: string | null,
   network: string
 ): Promise<number> {
-  // 1. Try exact match (domain + network + user)
+  // Try exact match (domain + network)
   if (domain) {
     const exactMatch = await prisma.domain_Assignment.findFirst({
-      where: { userId, domain, network, isActive: true },
+      where: { domain, network, isActive: true },
     });
     if (exactMatch) return exactMatch.revShare;
   }
 
-  // 2. Try network default (null domain + network + user)
-  const networkDefault = await prisma.domain_Assignment.findFirst({
-    where: { userId, domain: null, network, isActive: true },
-  });
-  if (networkDefault) return networkDefault.revShare;
-
-  // 3. Try user default (null domain + null network + user)
-  const userDefault = await prisma.domain_Assignment.findFirst({
-    where: { userId, domain: null, network: null, isActive: true },
-  });
-  if (userDefault) return userDefault.revShare;
-
-  // 4. System default
+  // Fall back to system default
   return DEFAULT_REV_SHARE;
 }
 
