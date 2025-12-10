@@ -130,6 +130,18 @@ export const authOptions: NextAuthConfig = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // If the url is relative, prepend the base URL
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
+      }
+      // If the url is on the same origin, allow it
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+      // Default redirect to dashboard
+      return `${baseUrl}/dashboard`;
+    },
   },
   secret: process.env.AUTH_SECRET,
   trustHost: true, // Required for custom domains like reporting.revengine.media
