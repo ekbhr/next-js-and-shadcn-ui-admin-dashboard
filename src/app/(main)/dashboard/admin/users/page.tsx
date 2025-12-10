@@ -1,7 +1,7 @@
 /**
  * User Management Page
  * 
- * Admin-only page to view users and assign domains.
+ * Admin-only page to manage users (roles, activate/deactivate).
  */
 
 import type { Metadata } from "next";
@@ -27,41 +27,33 @@ export default async function UsersPage() {
     redirect("/dashboard/unauthorized");
   }
 
-  // Get all users
+  // Get all users with domain count
   const users = await prisma.user.findMany({
     select: {
       id: true,
       email: true,
       name: true,
       role: true,
+      isActive: true,
       createdAt: true,
-      domainAssignments: {
-        where: { isActive: true, domain: { not: null } },
+      _count: {
         select: {
-          id: true,
-          domain: true,
-          network: true,
-          revShare: true,
+          domainAssignments: true,
         },
       },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  // Get all unique domains from admin's assignments (available domains)
-  const adminDomains = await prisma.domain_Assignment.findMany({
-    where: {
-      userId: session.user.id,
-      isActive: true,
-      domain: { not: null },
-    },
-    select: { domain: true, network: true },
-    distinct: ["domain"],
-  });
-
-  const availableDomains = adminDomains
-    .filter((d) => d.domain !== null)
-    .map((d) => ({ domain: d.domain!, network: d.network || "sedo" }));
+  const formattedUsers = users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    domainCount: user._count.domainAssignments,
+  }));
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -69,13 +61,12 @@ export default async function UsersPage() {
       <div>
         <h1 className="text-2xl font-bold">User Management</h1>
         <p className="text-muted-foreground">
-          Manage users and assign domains to them
+          Manage user roles and account status
         </p>
       </div>
 
       {/* User Management Component */}
-      <UserManagement users={users} availableDomains={availableDomains} />
+      <UserManagement users={formattedUsers} currentUserId={session.user.id} />
     </div>
   );
 }
-

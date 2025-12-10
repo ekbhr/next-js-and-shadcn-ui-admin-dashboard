@@ -3,7 +3,8 @@
 /**
  * Domain Assignment Table
  * 
- * Displays all domain assignments with inline editing of revShare.
+ * Displays all domain assignments with user assignment and revShare editing.
+ * One domain = One user
  */
 
 import { useState } from "react";
@@ -19,42 +20,62 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Pencil, Check, X, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Pencil, Check, X, Loader2, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface DomainAssignment {
   id: string;
-  domain: string | null;
-  network: string | null;
+  domain: string;
+  network: string;
   revShare: number;
   isActive: boolean;
   notes: string | null;
+  userId: string;
+  userName: string | null;
+  userEmail: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-interface DomainTableProps {
-  assignments: DomainAssignment[];
+interface UserOption {
+  id: string;
+  name: string | null;
+  email: string;
 }
 
-export function DomainTable({ assignments }: DomainTableProps) {
+interface DomainTableProps {
+  assignments: DomainAssignment[];
+  users: UserOption[];
+}
+
+export function DomainTable({ assignments, users }: DomainTableProps) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>("");
+  const [editRevShare, setEditRevShare] = useState<string>("");
+  const [editUserId, setEditUserId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   const handleEdit = (assignment: DomainAssignment) => {
     setEditingId(assignment.id);
-    setEditValue(assignment.revShare.toString());
+    setEditRevShare(assignment.revShare.toString());
+    setEditUserId(assignment.userId);
   };
 
   const handleCancel = () => {
     setEditingId(null);
-    setEditValue("");
+    setEditRevShare("");
+    setEditUserId("");
   };
 
-  const handleSave = async (id: string) => {
-    const newRevShare = parseFloat(editValue);
+  const handleSave = async (assignment: DomainAssignment) => {
+    const newRevShare = parseFloat(editRevShare);
     if (isNaN(newRevShare) || newRevShare < 0 || newRevShare > 100) {
       alert("RevShare must be between 0 and 100");
       return;
@@ -65,18 +86,25 @@ export function DomainTable({ assignments }: DomainTableProps) {
       const response = await fetch("/api/domains/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, revShare: newRevShare }),
+        body: JSON.stringify({
+          id: assignment.id,
+          revShare: newRevShare,
+          userId: editUserId,
+          domain: assignment.domain,
+          network: assignment.network,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update");
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update");
       }
 
       setEditingId(null);
       router.refresh();
     } catch (error) {
-      console.error("Error updating revShare:", error);
-      alert("Failed to update revShare");
+      console.error("Error updating assignment:", error);
+      alert(error instanceof Error ? error.message : "Failed to update");
     } finally {
       setSaving(false);
     }
@@ -129,9 +157,9 @@ export function DomainTable({ assignments }: DomainTableProps) {
             <TableRow>
               <TableHead>Domain</TableHead>
               <TableHead>Network</TableHead>
+              <TableHead>Assigned To</TableHead>
               <TableHead className="text-center">RevShare %</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Added</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -139,12 +167,39 @@ export function DomainTable({ assignments }: DomainTableProps) {
             {assignments.map((assignment) => (
               <TableRow key={assignment.id}>
                 <TableCell className="font-medium">
-                  {assignment.domain || "All Domains"}
+                  {assignment.domain}
                 </TableCell>
                 <TableCell>
                   <Badge className={getNetworkColor(assignment.network)}>
-                    {(assignment.network || "all").toUpperCase()}
+                    {assignment.network.toUpperCase()}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {editingId === assignment.id ? (
+                    <Select
+                      value={editUserId}
+                      onValueChange={setEditUserId}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            <span className="flex items-center gap-2">
+                              <User className="h-3 w-3" />
+                              {user.name || user.email}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span>{assignment.userName || assignment.userEmail}</span>
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-center">
                   {editingId === assignment.id ? (
@@ -154,10 +209,9 @@ export function DomainTable({ assignments }: DomainTableProps) {
                         min="0"
                         max="100"
                         step="1"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
+                        value={editRevShare}
+                        onChange={(e) => setEditRevShare(e.target.value)}
                         className="w-20 text-center"
-                        autoFocus
                       />
                       <span>%</span>
                     </div>
@@ -172,16 +226,13 @@ export function DomainTable({ assignments }: DomainTableProps) {
                     {assignment.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(assignment.createdAt)}
-                </TableCell>
                 <TableCell className="text-right">
                   {editingId === assignment.id ? (
                     <div className="flex items-center justify-end gap-2">
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleSave(assignment.id)}
+                        onClick={() => handleSave(assignment)}
                         disabled={saving}
                       >
                         {saving ? (
@@ -217,4 +268,3 @@ export function DomainTable({ assignments }: DomainTableProps) {
     </Card>
   );
 }
-

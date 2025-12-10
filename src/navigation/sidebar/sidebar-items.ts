@@ -4,6 +4,7 @@ import {
   Globe,
   Settings,
   Users,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,12 @@ export const sidebarItems: NavGroup[] = [
     label: "Admin",
     adminOnly: true, // Only visible to admin users
     items: [
+      {
+        title: "Admin Report",
+        url: "/dashboard/admin/report",
+        icon: BarChart3,
+        adminOnly: true,
+      },
       {
         title: "User Management",
         url: "/dashboard/admin/users",
