@@ -43,58 +43,56 @@ export function calculateNetRevenue(grossRevenue: number, revShare: number): num
  * Save Sedo revenue data to database (upsert)
  * Updates if record exists, inserts if new
  * 
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN, not the logged-in user.
+ * 
  * @param data - Array of Sedo revenue data
- * @param userId - User ID to save data for
+ * @param fallbackUserId - User ID to use if domain has no assignment (usually admin)
  * @param options - Optional settings
- * @param options.filterByAssignedDomains - If true, only saves data for domains assigned to user
+ * @param options.filterByAssignedDomains - If true, only saves data for domains assigned to specific users
+ * @param options.saveToDomainOwner - If true, saves data to the user who owns the domain (default: true)
  */
 export async function saveSedoRevenue(
   data: SedoRevenueData[],
-  userId: string,
-  options: { filterByAssignedDomains?: boolean } = {}
+  fallbackUserId: string,
+  options: { filterByAssignedDomains?: boolean; saveToDomainOwner?: boolean } = {}
 ): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
   let saved = 0;
   let updated = 0;
   let skipped = 0;
   const errors: string[] = [];
 
-  // Get user's assigned domains if filtering is enabled
-  let assignedDomains: string[] | null = null;
-  if (options.filterByAssignedDomains) {
-    assignedDomains = await getUserAssignedDomains(userId, "sedo");
-  }
+  // Default: save to domain owner
+  const saveToDomainOwner = options.saveToDomainOwner !== false;
+
+  // Get all domain owners for efficient lookup
+  const domainOwners = saveToDomainOwner ? await getAllDomainOwners("sedo") : new Map();
 
   for (const item of data) {
     try {
-      // Get revShare for this domain
       const domainValue = item.domain || null;
+      const normalizedDomain = domainValue?.toLowerCase().trim();
 
-      // If filtering by assigned domains, skip domains not assigned to this user
-      if (options.filterByAssignedDomains && assignedDomains !== null) {
-        // Skip if no domains assigned or domain not in assigned list
-        if (assignedDomains.length === 0) {
+      // Determine which user should own this data
+      let targetUserId = fallbackUserId;
+      
+      if (saveToDomainOwner && normalizedDomain) {
+        const ownerId = domainOwners.get(normalizedDomain);
+        if (ownerId) {
+          targetUserId = ownerId;
+        } else if (options.filterByAssignedDomains) {
+          // Domain not assigned to anyone - skip if filtering is enabled
           skipped++;
           continue;
         }
-        
-        // If data has a domain, check if it's assigned to this user
-        if (domainValue) {
-          const normalizedDomain = domainValue.toLowerCase().trim();
-          const isAssigned = assignedDomains.some(
-            (d) => d.toLowerCase().trim() === normalizedDomain
-          );
-          if (!isAssigned) {
-            skipped++;
-            continue;
-          }
-        } else {
-          // Skip aggregate data (no specific domain) for non-admin users
-          skipped++;
-          continue;
-        }
+        // If domain not assigned but filtering disabled, use fallback user (admin)
+      } else if (options.filterByAssignedDomains && !normalizedDomain) {
+        // Skip aggregate data (no domain) when filtering
+        skipped++;
+        continue;
       }
 
-      const revShare = await getRevShare(userId, domainValue, "sedo");
+      // Get revShare for this domain
+      const revShare = await getRevShare(targetUserId, domainValue, "sedo");
       const netRevenue = calculateNetRevenue(item.revenue, revShare);
 
       // Parse date - ensure it's a valid date
@@ -113,7 +111,7 @@ export async function saveSedoRevenue(
         status: "Estimated",
       };
 
-      // Find existing record manually (Prisma has issues with null in compound unique where)
+      // Find existing record manually (check both for this user and if domain already exists for another user)
       const existing = await prisma.bidder_Sedo.findFirst({
         where: {
           date,
@@ -121,7 +119,7 @@ export async function saveSedoRevenue(
           c1: null,
           c2: null,
           c3: null,
-          userId,
+          userId: targetUserId,
         },
       });
 
@@ -133,25 +131,50 @@ export async function saveSedoRevenue(
         });
         updated++;
       } else {
-        // Create new record
-        await prisma.bidder_Sedo.create({
-          data: {
+        // Check if this domain+date exists for a DIFFERENT user (shouldn't happen, but handle it)
+        const existingOtherUser = await prisma.bidder_Sedo.findFirst({
+          where: {
             date,
             domain: domainValue,
             c1: null,
             c2: null,
             c3: null,
-            currency: "EUR",
-            userId,
-            ...recordData,
           },
         });
-        saved++;
+
+        if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
+          // Update existing record to correct user
+          await prisma.bidder_Sedo.update({
+            where: { id: existingOtherUser.id },
+            data: {
+              userId: targetUserId,
+              ...recordData,
+            },
+          });
+          updated++;
+        } else if (!existingOtherUser) {
+          // Create new record
+          await prisma.bidder_Sedo.create({
+            data: {
+              date,
+              domain: domainValue,
+              c1: null,
+              c2: null,
+              c3: null,
+              currency: "EUR",
+              userId: targetUserId,
+              ...recordData,
+            },
+          });
+          saved++;
+        } else {
+          updated++; // Same user, just update
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      errors.push(`Failed to save ${item.date}: ${errorMsg}`);
-      console.error(`[Revenue DB] Error saving ${item.date}:`, error);
+      errors.push(`Failed to save ${item.date} ${item.domain}: ${errorMsg}`);
+      console.error(`[Revenue DB] Error saving ${item.date} ${item.domain}:`, error);
     }
   }
 
@@ -311,6 +334,50 @@ export async function getUserAssignedDomains(
 }
 
 /**
+ * Get the user ID who owns a specific domain
+ * Returns null if domain is not assigned to anyone
+ */
+export async function getDomainOwner(
+  domain: string,
+  network: string = "sedo"
+): Promise<string | null> {
+  const assignment = await prisma.domain_Assignment.findFirst({
+    where: {
+      domain: domain.toLowerCase().trim(),
+      network,
+      isActive: true,
+    },
+    select: { userId: true },
+  });
+
+  return assignment?.userId ?? null;
+}
+
+/**
+ * Get all domain assignments with their owners for a network
+ * Returns a Map of domain -> userId
+ */
+export async function getAllDomainOwners(
+  network: string = "sedo"
+): Promise<Map<string, string>> {
+  const assignments = await prisma.domain_Assignment.findMany({
+    where: {
+      network,
+      isActive: true,
+    },
+    select: { domain: true, userId: true },
+  });
+
+  const map = new Map<string, string>();
+  for (const a of assignments) {
+    if (a.domain) {
+      map.set(a.domain.toLowerCase().trim(), a.userId);
+    }
+  }
+  return map;
+}
+
+/**
  * Sync domains from Sedo to Domain_Assignment table
  * Creates assignments with default revShare if they don't exist
  */
@@ -363,21 +430,25 @@ export async function syncDomainsToAssignment(
 }
 
 /**
- * Sync Bidder_Sedo data to Overview_Report for a user
- * Aggregates by date, network, domain
+ * Sync Bidder_Sedo data to Overview_Report
+ * If userId is provided, syncs only that user's data
+ * If userId is null, syncs ALL users' data (admin sync)
+ * 
+ * Data in Bidder_Sedo already has correct userId from saveSedoRevenue
  */
-export async function syncToOverviewReport(userId: string): Promise<{ synced: number; errors: string[] }> {
+export async function syncToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
   let synced = 0;
   const errors: string[] = [];
 
   try {
-    // Get all Sedo data for this user
+    // Get Sedo data - either for one user or all users
     const sedoData = await prisma.bidder_Sedo.findMany({
-      where: { userId },
+      where: userId ? { userId } : undefined,
     });
 
-    // Group by date + domain for Overview
+    // Group by userId + date + domain for Overview
     const grouped = new Map<string, {
+      userId: string;
       date: Date;
       domain: string | null;
       grossRevenue: number;
@@ -387,7 +458,7 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
     }>();
 
     for (const record of sedoData) {
-      const key = `${record.date.toISOString().split('T')[0]}_${record.domain || 'all'}`;
+      const key = `${record.userId}_${record.date.toISOString().split('T')[0]}_${record.domain || 'all'}`;
       
       if (grouped.has(key)) {
         const existing = grouped.get(key)!;
@@ -397,6 +468,7 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
         existing.clicks += record.clicks;
       } else {
         grouped.set(key, {
+          userId: record.userId,
           date: record.date,
           domain: record.domain,
           grossRevenue: record.grossRevenue,
@@ -407,7 +479,7 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
       }
     }
 
-    // Save to Overview_Report (using findFirst + update/create to handle null domains)
+    // Save to Overview_Report
     for (const [, data] of grouped) {
       try {
         const ctr = data.impressions > 0 
@@ -426,13 +498,13 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
           rpm,
         };
 
-        // Find existing record manually (Prisma has issues with null in compound unique where)
+        // Find existing record
         const existing = await prisma.overview_Report.findFirst({
           where: {
             date: data.date,
             network: "sedo",
             domain: data.domain,
-            userId,
+            userId: data.userId,
           },
         });
 
@@ -448,7 +520,7 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
               network: "sedo",
               domain: data.domain,
               currency: "EUR",
-              userId,
+              userId: data.userId,
               ...recordData,
             },
           });
@@ -460,7 +532,7 @@ export async function syncToOverviewReport(userId: string): Promise<{ synced: nu
       }
     }
 
-    console.log(`[Overview Sync] User ${userId}: ${synced} records synced, ${errors.length} errors`);
+    console.log(`[Overview Sync] ${userId ? `User ${userId}` : 'All users'}: ${synced} records synced, ${errors.length} errors`);
   } catch (error) {
     console.error("[Overview Sync] Error:", error);
     errors.push(error instanceof Error ? error.message : "Unknown error");

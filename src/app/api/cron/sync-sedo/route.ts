@@ -3,8 +3,13 @@
  * 
  * GET /api/cron/sync-sedo
  * 
- * Automated daily sync of Sedo data for all users.
+ * Automated daily sync of Sedo data.
  * Triggered by Vercel Cron at 5:00 AM UTC (9:00 AM Dubai).
+ * 
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN.
+ * - Fetches data from Sedo API once
+ * - Each domain's data goes to the user who has that domain assigned
+ * - Domains without assignment go to the first admin (fallback)
  * 
  * Security: Protected by CRON_SECRET environment variable.
  */
@@ -12,7 +17,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sedoClient } from "@/lib/sedo";
-import { saveSedoRevenue, syncToOverviewReport, syncDomainsToAssignment } from "@/lib/revenue-db";
+import { saveSedoRevenue, syncToOverviewReport } from "@/lib/revenue-db";
 
 // Verify cron request is from Vercel
 function verifyCronRequest(request: Request): boolean {
@@ -58,113 +63,86 @@ export async function GET(request: Request) {
     });
   }
 
-  // Get all users with their roles
-  const users = await prisma.user.findMany({
-    select: { id: true, email: true, role: true },
-  });
+  try {
+    // Find admin user to use as fallback for unassigned domains
+    const adminUser = await prisma.user.findFirst({
+      where: { role: "admin" },
+      select: { id: true, email: true },
+    });
 
-  console.log(`[Cron] Found ${users.length} users to sync`);
+    if (!adminUser) {
+      console.error("[Cron] No admin user found - cannot sync");
+      return NextResponse.json({
+        success: false,
+        error: "No admin user found. Please create an admin user first.",
+      });
+    }
 
-  const results: Array<{
-    userId: string;
-    email: string;
-    role: string;
-    success: boolean;
-    fetched?: number;
-    saved?: number;
-    updated?: number;
-    skipped?: number;
-    overviewSynced?: number;
-    domainsCreated?: number;
-    error?: string;
-  }> = [];
+    console.log(`[Cron] Using admin ${adminUser.email} as fallback for unassigned domains`);
 
-  // Fetch Sedo data once (it's the same for all users from the API)
-  // Then save with each user's revShare settings
-  const sedoData = await sedoClient.getRevenueData();
-  
-  // Also fetch domains for assignment sync
-  const sedoDomains = await sedoClient.getDomains();
+    // Fetch Sedo data once
+    const sedoData = await sedoClient.getRevenueData();
+    
+    // Also fetch domains for reference
+    const sedoDomains = await sedoClient.getDomains();
 
-  if (!sedoData.success || !sedoData.data) {
-    console.error("[Cron] Failed to fetch Sedo data:", sedoData.error);
+    if (!sedoData.success || !sedoData.data) {
+      console.error("[Cron] Failed to fetch Sedo data:", sedoData.error);
+      return NextResponse.json({
+        success: false,
+        error: sedoData.error || "Failed to fetch Sedo data",
+        duration: Date.now() - startTime,
+      });
+    }
+
+    console.log(`[Cron] Fetched ${sedoData.data.length} records from Sedo`);
+    console.log(`[Cron] Fetched ${sedoDomains.domains?.length || 0} domains from Sedo`);
+
+    // Save data ONCE - each record goes to the user who owns that domain
+    // saveToDomainOwner: true = look up domain ownership and save to correct user
+    // filterByAssignedDomains: false = for unassigned domains, use fallback (admin)
+    console.log(`[Cron] Saving records to domain owners...`);
+    const saveResult = await saveSedoRevenue(sedoData.data, adminUser.id, {
+      saveToDomainOwner: true,
+      filterByAssignedDomains: false, // Save all data, unassigned goes to admin
+    });
+
+    // Sync to Overview Report for ALL users (null = all users)
+    console.log(`[Cron] Syncing to Overview Report for all users...`);
+    const overviewResult = await syncToOverviewReport(null);
+
+    const duration = Date.now() - startTime;
+
+    console.log(`[Cron] Sync complete in ${duration}ms`);
+    console.log(`[Cron] Results: ${saveResult.saved} saved, ${saveResult.updated} updated, ${saveResult.skipped} skipped`);
+
+    return NextResponse.json({
+      success: true,
+      message: "Sedo cron sync completed",
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      summary: {
+        recordsFetched: sedoData.data.length,
+        recordsSaved: saveResult.saved,
+        recordsUpdated: saveResult.updated,
+        recordsSkipped: saveResult.skipped,
+        overviewSynced: overviewResult.synced,
+        domainsFetched: sedoDomains.domains?.length || 0,
+        dateRange: sedoData.dateRange,
+        errors: saveResult.errors.length + overviewResult.errors.length,
+      },
+      details: {
+        saveErrors: saveResult.errors.length > 0 ? saveResult.errors.slice(0, 10) : undefined,
+        overviewErrors: overviewResult.errors.length > 0 ? overviewResult.errors.slice(0, 10) : undefined,
+      },
+    });
+  } catch (error) {
+    console.error("[Cron] Error:", error);
     return NextResponse.json({
       success: false,
-      error: sedoData.error || "Failed to fetch Sedo data",
+      error: error instanceof Error ? error.message : "Unknown error",
       duration: Date.now() - startTime,
     });
   }
-
-  console.log(`[Cron] Fetched ${sedoData.data.length} records from Sedo`);
-
-  // Save data for each user
-  for (const user of users) {
-    try {
-      const isAdmin = user.role === "admin";
-      console.log(`[Cron] Syncing user: ${user.email} (role: ${user.role || "user"})`);
-      
-      // Admin users: sync ALL domains to their Domain_Assignment first
-      // Regular users: only get domains that were explicitly assigned to them
-      let domainsCreated = 0;
-      if (isAdmin && sedoDomains.success && sedoDomains.domains.length > 0) {
-        // Only admins get auto-created domain assignments
-        const domainResult = await syncDomainsToAssignment(user.id, sedoDomains.domains, "sedo", 80);
-        domainsCreated = domainResult.created;
-      }
-      
-      // Save to Bidder_Sedo
-      // Admin: save all data (no filtering)
-      // Regular user: only save data for their assigned domains
-      const saveResult = await saveSedoRevenue(sedoData.data, user.id, {
-        filterByAssignedDomains: !isAdmin,
-      });
-      
-      // Auto-sync to Overview_Report (this uses data already in Bidder_Sedo which is filtered)
-      const overviewResult = await syncToOverviewReport(user.id);
-      
-      results.push({
-        userId: user.id,
-        email: user.email,
-        role: user.role || "user",
-        success: true,
-        fetched: sedoData.data.length,
-        saved: saveResult.saved,
-        updated: saveResult.updated,
-        skipped: saveResult.skipped,
-        overviewSynced: overviewResult.synced,
-        domainsCreated,
-      });
-    } catch (error) {
-      console.error(`[Cron] Error syncing user ${user.email}:`, error);
-      results.push({
-        userId: user.id,
-        email: user.email,
-        role: user.role || "user",
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
-
-  const duration = Date.now() - startTime;
-  const successCount = results.filter(r => r.success).length;
-
-  console.log(`[Cron] Sync complete: ${successCount}/${users.length} users synced in ${duration}ms`);
-
-  return NextResponse.json({
-    success: true,
-    message: "Sedo cron sync completed",
-    timestamp: new Date().toISOString(),
-    duration: `${duration}ms`,
-    summary: {
-      totalUsers: users.length,
-      successfulSyncs: successCount,
-      failedSyncs: users.length - successCount,
-      recordsFetched: sedoData.data.length,
-      domainsFetched: sedoDomains.domains?.length || 0,
-      dateRange: sedoData.dateRange,
-    },
-    results,
-  });
 }
 

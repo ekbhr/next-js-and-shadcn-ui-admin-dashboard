@@ -4,10 +4,11 @@
  * POST /api/reports/sedo/sync
  * 
  * Fetches data from Sedo API and saves to database.
- * Supports upsert (update if exists, insert if new).
  * 
- * Admin users: see all domains
- * Regular users: only see domains assigned to them
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN based on Domain_Assignment.
+ * - Each domain's data goes to the user who has that domain assigned
+ * - Domains without assignment go to the admin (fallback)
+ * - Regular users can only sync domains assigned to them
  */
 
 import { NextResponse } from "next/server";
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     // Fetch data from Sedo API (last 31 days)
-    console.log(`[Sedo Sync] Fetching data for user ${userId}...`);
+    console.log(`[Sedo Sync] Fetching data (initiated by user ${userId}, admin: ${userIsAdmin})...`);
     const sedoData = await sedoClient.getRevenueData({ domain });
 
     if (!sedoData.success || !sedoData.data) {
@@ -68,17 +69,21 @@ export async function POST(request: Request) {
     }
 
     // Save to database
-    // Admin: save all data, Regular user: only save assigned domains
-    console.log(`[Sedo Sync] Saving ${sedoData.data.length} records (admin: ${userIsAdmin})...`);
+    // Data is saved to the USER WHO OWNS THE DOMAIN (from Domain_Assignment)
+    // - saveToDomainOwner: true = each domain's data goes to its owner
+    // - filterByAssignedDomains: skip domains that aren't assigned to anyone (for non-admins)
+    // - fallbackUserId: for unassigned domains, admin gets the data
+    console.log(`[Sedo Sync] Saving ${sedoData.data.length} records to domain owners...`);
     const saveResult = await saveSedoRevenue(sedoData.data, userId, {
-      filterByAssignedDomains: !userIsAdmin,
+      saveToDomainOwner: true,
+      filterByAssignedDomains: !userIsAdmin, // Non-admins only sync assigned domains
     });
 
-    // Auto-sync to Overview Report
+    // Auto-sync to Overview Report (sync all users' data if admin, or just this user)
     console.log(`[Sedo Sync] Syncing to Overview Report...`);
-    const overviewResult = await syncToOverviewReport(userId);
+    const overviewResult = await syncToOverviewReport(userIsAdmin ? null : userId);
 
-    // Get updated summary
+    // Get updated summary (for the current user)
     const summary = await getSedoRevenueSummary(userId);
 
     return NextResponse.json({
