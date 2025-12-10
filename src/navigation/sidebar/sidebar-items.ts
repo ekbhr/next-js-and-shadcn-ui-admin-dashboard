@@ -5,6 +5,7 @@ import {
   Settings,
   Users,
   BarChart3,
+  Network,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,7 +60,7 @@ export const sidebarItems: NavGroup[] = [
     adminOnly: true, // Only visible to admin users
     items: [
       {
-        title: "Admin Report",
+        title: "Overview",
         url: "/dashboard/admin/report",
         icon: BarChart3,
         adminOnly: true,
@@ -74,6 +75,26 @@ export const sidebarItems: NavGroup[] = [
         title: "Domain Assignment",
         url: "/dashboard/admin/domains",
         icon: Globe,
+        adminOnly: true,
+      },
+    ],
+  },
+  {
+    id: 3,
+    label: "Network Reports",
+    adminOnly: true,
+    items: [
+      {
+        title: "Sedo",
+        url: "/dashboard/admin/reports/sedo",
+        icon: Network,
+        adminOnly: true,
+      },
+      {
+        title: "Yandex",
+        url: "/dashboard/admin/reports/yandex",
+        icon: Network,
+        comingSoon: true,
         adminOnly: true,
       },
       {
