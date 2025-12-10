@@ -132,6 +132,7 @@ export const authOptions: NextAuthConfig = {
     },
   },
   secret: process.env.AUTH_SECRET,
+  trustHost: true, // Required for custom domains like reporting.revengine.media
   debug: process.env.NODE_ENV === "development",
 };
 
