@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Send test email
     const result = await sendEmail({
       to: email,
-      subject: "Test Email - EKBHR Reporting Dashboard",
+      subject: "Test Email - RevEngine Media",
       html: emailHtml,
     });
 

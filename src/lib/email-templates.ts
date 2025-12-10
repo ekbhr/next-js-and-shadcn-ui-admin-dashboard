@@ -25,7 +25,7 @@ export function getPasswordResetEmailTemplate(resetUrl: string, userName?: strin
                 Hi ${name},
               </p>
               <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #4a4a4a;">
-                We received a request to reset your password for your EKBHR Reporting Dashboard account. Click the button below to create a new password:
+                We received a request to reset your password for your RevEngine Media account. Click the button below to create a new password:
               </p>
               <table role="presentation" style="margin: 30px 0;">
                 <tr>
@@ -50,7 +50,7 @@ export function getPasswordResetEmailTemplate(resetUrl: string, userName?: strin
           <tr>
             <td style="padding: 30px; text-align: center; border-top: 1px solid #e5e5e5; background-color: #f9f9f9;">
               <p style="margin: 0; font-size: 12px; color: #9b9b9b;">
-                © ${new Date().getFullYear()} EKBHR Reporting Dashboard. All rights reserved.
+                © ${new Date().getFullYear()} RevEngine Media. All rights reserved.
               </p>
             </td>
           </tr>

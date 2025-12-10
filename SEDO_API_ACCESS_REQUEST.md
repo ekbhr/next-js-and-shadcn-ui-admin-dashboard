@@ -33,7 +33,7 @@ I hope this email finds you well.
 I am reaching out to request API access for Sedo's parking statistics and reporting features. We are developing a reporting dashboard for our domain monetization operations and would like to integrate Sedo's API to fetch parking statistics data programmatically.
 
 **Company Details:**
-- Company Name: EKBHR MEDIA
+- Company Name: RevEngine Media
 - Website: ekbhr.com
 - Email: [your-email@ekbhr.com]
 - Contact Person: [Your Name]
@@ -77,7 +77,7 @@ Best regards,
 
 [Your Name]
 [Your Title]
-EKBHR MEDIA
+RevEngine Media
 [Your Email]
 [Your Phone Number]
 [Date]
@@ -94,7 +94,7 @@ Dear Sedo Team,
 
 I am writing to request API access for Sedo's parking statistics features. We are developing an internal reporting dashboard and need programmatic access to retrieve parking statistics data for our domain portfolio.
 
-**Company**: EKBHR MEDIA (ekbhr.com)
+**Company**: RevEngine Media (ekbhr.com)
 **Use Case**: Internal reporting dashboard for domain monetization analytics
 **Required Access**: DomainParkingFinalStatistics and related reporting methods
 
@@ -108,7 +108,7 @@ Thank you for your assistance.
 
 Best regards,
 [Your Name]
-EKBHR MEDIA
+RevEngine Media
 [Your Email]
 [Your Phone Number]
 ```
@@ -129,7 +129,7 @@ EKBHR MEDIA
 ## Information to Have Ready
 
 Before sending, make sure you have:
-- ✅ Your company name (EKBHR MEDIA)
+- ✅ Your company name (RevEngine Media)
 - ✅ Your email address
 - ✅ Your phone number
 - ✅ Your Sedo account details (if you have one)
@@ -176,7 +176,7 @@ Thank you for your attention.
 
 Best regards,
 [Your Name]
-EKBHR MEDIA
+RevEngine Media
 [Your Email]
 ```
 

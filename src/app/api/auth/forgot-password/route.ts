@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       
       await sendEmail({
         to: user.email,
-        subject: "Reset Your Password - EKBHR Reporting Dashboard",
+        subject: "Reset Your Password - RevEngine Media",
         html: emailHtml,
       });
     } catch (emailError) {
