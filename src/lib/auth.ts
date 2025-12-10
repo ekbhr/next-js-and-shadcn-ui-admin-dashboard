@@ -61,47 +61,29 @@ export const authOptions: NextAuthConfig = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      // For Google OAuth, create user if doesn't exist
-      if (account?.provider === "google" && user.email) {
-        try {
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email },
-          });
-
-          if (!existingUser) {
-            // Create new user for Google OAuth
-            await prisma.user.create({
-              data: {
-                email: user.email,
-                name: user.name,
-                image: user.image,
-                emailVerified: new Date(),
-              },
-            });
-          }
-        } catch (error) {
-          console.error("Error in signIn callback:", error);
-          // Still allow sign in even if DB operation fails
-          // The jwt callback will handle fetching/creating user
-        }
-      }
+      console.log("[AUTH] signIn callback - provider:", account?.provider, "email:", user.email);
+      // Always allow sign in - user creation happens in jwt callback
       return true;
     },
     async jwt({ token, user, account }) {
       if (user) {
-        // For Google OAuth, fetch the user ID from database
+        console.log("[AUTH] jwt callback - user:", user.email, "provider:", account?.provider);
+        token.email = user.email;
+        token.name = user.name;
+        
+        // For Google OAuth, try to get/create user in database
         if (account?.provider === "google" && user.email) {
           try {
             let dbUser = await prisma.user.findUnique({
               where: { email: user.email },
             });
             
-            // Create user if doesn't exist (fallback)
             if (!dbUser) {
+              console.log("[AUTH] Creating new user for:", user.email);
               dbUser = await prisma.user.create({
                 data: {
                   email: user.email,
-                  name: user.name,
+                  name: user.name || "",
                   image: user.image,
                   emailVerified: new Date(),
                 },
@@ -109,16 +91,14 @@ export const authOptions: NextAuthConfig = {
             }
             
             token.id = dbUser.id;
+            console.log("[AUTH] User ID set:", dbUser.id);
           } catch (error) {
-            console.error("Error in jwt callback:", error);
-            // Use a temporary ID if database fails
-            token.id = user.id || user.email;
+            console.error("[AUTH] Database error:", error);
+            token.id = user.id || user.email || "temp-id";
           }
         } else {
           token.id = user.id;
         }
-        token.email = user.email;
-        token.name = user.name;
       }
       return token;
     },
@@ -129,18 +109,6 @@ export const authOptions: NextAuthConfig = {
         session.user.name = token.name as string;
       }
       return session;
-    },
-    async redirect({ url, baseUrl }) {
-      // If the url is relative, prepend the base URL
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
-      }
-      // If the url is on the same origin, allow it
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-      // Default redirect to dashboard
-      return `${baseUrl}/dashboard`;
     },
   },
   secret: process.env.AUTH_SECRET,
