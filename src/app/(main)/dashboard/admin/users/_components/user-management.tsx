@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, User, Shield, Globe } from "lucide-react";
+import { Loader2, User, Shield, Globe, LogIn } from "lucide-react";
 
 interface UserData {
   id: string;
@@ -92,6 +92,28 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
     }
   };
 
+  const handleImpersonate = async (userId: string) => {
+    setLoading(`impersonate-${userId}`);
+    try {
+      const response = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to impersonate user");
+      }
+
+      // Redirect to dashboard to see the user's view
+      window.location.href = "/dashboard";
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to impersonate user");
+      setLoading(null);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -112,6 +134,7 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
               <TableHead>Domains</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="text-center">Active</TableHead>
+              <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -185,6 +208,26 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
                         onCheckedChange={(checked) => handleActiveToggle(user.id, checked)}
                         disabled={isCurrentUser}
                       />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {!isCurrentUser && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleImpersonate(user.id)}
+                        disabled={loading === `impersonate-${user.id}` || !user.isActive}
+                        title={!user.isActive ? "Cannot impersonate inactive user" : `Login as ${user.email}`}
+                      >
+                        {loading === `impersonate-${user.id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <LogIn className="h-4 w-4 mr-1" />
+                            Login as
+                          </>
+                        )}
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>

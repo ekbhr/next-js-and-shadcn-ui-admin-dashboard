@@ -3,6 +3,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+
+const IMPERSONATION_COOKIE = "impersonation";
 
 export const authOptions: NextAuthConfig = {
   providers: [
@@ -110,10 +113,40 @@ export const authOptions: NextAuthConfig = {
     },
     async session({ session, token }) {
       if (session.user) {
+        // Check for impersonation
+        try {
+          const cookieStore = await cookies();
+          const impersonationCookie = cookieStore.get(IMPERSONATION_COOKIE);
+          
+          if (impersonationCookie?.value) {
+            const impersonationData = JSON.parse(impersonationCookie.value);
+            
+            // Verify the admin making the request is the one who started impersonation
+            if (impersonationData.adminId === token.id) {
+              // Return impersonated user's session
+              session.user.id = impersonationData.targetUserId;
+              session.user.email = impersonationData.targetUserEmail;
+              session.user.name = impersonationData.targetUserName;
+              session.user.role = impersonationData.targetUserRole || "user";
+              session.user.isImpersonating = true;
+              session.user.impersonatedBy = {
+                id: impersonationData.adminId,
+                email: impersonationData.adminEmail,
+                name: impersonationData.adminName,
+              };
+              return session;
+            }
+          }
+        } catch {
+          // Cookie parsing failed, continue with normal session
+        }
+        
+        // Normal session (not impersonating)
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
         session.user.role = (token.role as string) || "user";
+        session.user.isImpersonating = false;
       }
       return session;
     },
