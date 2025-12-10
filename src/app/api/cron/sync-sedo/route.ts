@@ -58,10 +58,9 @@ export async function GET(request: Request) {
     });
   }
 
-  // Get all users who have domain assignments (active users)
-  // In a real system, you might have a flag for "sedo enabled" users
+  // Get all users with their roles
   const users = await prisma.user.findMany({
-    select: { id: true, email: true },
+    select: { id: true, email: true, role: true },
   });
 
   console.log(`[Cron] Found ${users.length} users to sync`);
@@ -69,10 +68,12 @@ export async function GET(request: Request) {
   const results: Array<{
     userId: string;
     email: string;
+    role: string;
     success: boolean;
     fetched?: number;
     saved?: number;
     updated?: number;
+    skipped?: number;
     overviewSynced?: number;
     domainsCreated?: number;
     error?: string;
@@ -99,28 +100,37 @@ export async function GET(request: Request) {
   // Save data for each user
   for (const user of users) {
     try {
-      console.log(`[Cron] Syncing user: ${user.email}`);
+      const isAdmin = user.role === "admin";
+      console.log(`[Cron] Syncing user: ${user.email} (role: ${user.role || "user"})`);
       
-      // Save to Bidder_Sedo
-      const saveResult = await saveSedoRevenue(sedoData.data, user.id);
-      
-      // Auto-sync to Overview_Report
-      const overviewResult = await syncToOverviewReport(user.id);
-      
-      // Sync domains to Domain_Assignment
+      // Admin users: sync ALL domains to their Domain_Assignment first
+      // Regular users: only get domains that were explicitly assigned to them
       let domainsCreated = 0;
-      if (sedoDomains.success && sedoDomains.domains.length > 0) {
+      if (isAdmin && sedoDomains.success && sedoDomains.domains.length > 0) {
+        // Only admins get auto-created domain assignments
         const domainResult = await syncDomainsToAssignment(user.id, sedoDomains.domains, "sedo", 80);
         domainsCreated = domainResult.created;
       }
       
+      // Save to Bidder_Sedo
+      // Admin: save all data (no filtering)
+      // Regular user: only save data for their assigned domains
+      const saveResult = await saveSedoRevenue(sedoData.data, user.id, {
+        filterByAssignedDomains: !isAdmin,
+      });
+      
+      // Auto-sync to Overview_Report (this uses data already in Bidder_Sedo which is filtered)
+      const overviewResult = await syncToOverviewReport(user.id);
+      
       results.push({
         userId: user.id,
         email: user.email,
+        role: user.role || "user",
         success: true,
         fetched: sedoData.data.length,
         saved: saveResult.saved,
         updated: saveResult.updated,
+        skipped: saveResult.skipped,
         overviewSynced: overviewResult.synced,
         domainsCreated,
       });
@@ -129,6 +139,7 @@ export async function GET(request: Request) {
       results.push({
         userId: user.id,
         email: user.email,
+        role: user.role || "user",
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       });

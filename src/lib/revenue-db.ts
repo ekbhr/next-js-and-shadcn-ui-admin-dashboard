@@ -54,19 +54,58 @@ export function calculateNetRevenue(grossRevenue: number, revShare: number): num
 /**
  * Save Sedo revenue data to database (upsert)
  * Updates if record exists, inserts if new
+ * 
+ * @param data - Array of Sedo revenue data
+ * @param userId - User ID to save data for
+ * @param options - Optional settings
+ * @param options.filterByAssignedDomains - If true, only saves data for domains assigned to user
  */
 export async function saveSedoRevenue(
   data: SedoRevenueData[],
-  userId: string
-): Promise<{ saved: number; updated: number; errors: string[] }> {
+  userId: string,
+  options: { filterByAssignedDomains?: boolean } = {}
+): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
   let saved = 0;
   let updated = 0;
+  let skipped = 0;
   const errors: string[] = [];
+
+  // Get user's assigned domains if filtering is enabled
+  let assignedDomains: string[] | null = null;
+  if (options.filterByAssignedDomains) {
+    assignedDomains = await getUserAssignedDomains(userId, "sedo");
+  }
 
   for (const item of data) {
     try {
       // Get revShare for this domain
       const domainValue = item.domain || null;
+
+      // If filtering by assigned domains, skip domains not assigned to this user
+      if (options.filterByAssignedDomains && assignedDomains !== null) {
+        // Skip if no domains assigned or domain not in assigned list
+        if (assignedDomains.length === 0) {
+          skipped++;
+          continue;
+        }
+        
+        // If data has a domain, check if it's assigned to this user
+        if (domainValue) {
+          const normalizedDomain = domainValue.toLowerCase().trim();
+          const isAssigned = assignedDomains.some(
+            (d) => d.toLowerCase().trim() === normalizedDomain
+          );
+          if (!isAssigned) {
+            skipped++;
+            continue;
+          }
+        } else {
+          // Skip aggregate data (no specific domain) for non-admin users
+          skipped++;
+          continue;
+        }
+      }
+
       const revShare = await getRevShare(userId, domainValue, "sedo");
       const netRevenue = calculateNetRevenue(item.revenue, revShare);
 
@@ -128,9 +167,9 @@ export async function saveSedoRevenue(
     }
   }
 
-  console.log(`[Revenue DB] Sedo data saved: ${saved} new, ${updated} updated, ${errors.length} errors`);
+  console.log(`[Revenue DB] Sedo data saved: ${saved} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
   
-  return { saved, updated, errors };
+  return { saved, updated, skipped, errors };
 }
 
 /**
@@ -258,6 +297,30 @@ export async function getDomainAssignments(userId: string) {
     where: { userId, isActive: true },
     orderBy: [{ domain: "asc" }, { network: "asc" }],
   });
+}
+
+/**
+ * Get list of domain names assigned to a user for a specific network
+ * Returns null if user has no specific domain assignments (means they see nothing)
+ * Returns empty array should also mean no domains assigned
+ */
+export async function getUserAssignedDomains(
+  userId: string,
+  network: string = "sedo"
+): Promise<string[]> {
+  const assignments = await prisma.domain_Assignment.findMany({
+    where: {
+      userId,
+      network,
+      isActive: true,
+      domain: { not: null }, // Only get specific domain assignments, not defaults
+    },
+    select: { domain: true },
+  });
+
+  return assignments
+    .map((a) => a.domain)
+    .filter((d): d is string => d !== null);
 }
 
 /**

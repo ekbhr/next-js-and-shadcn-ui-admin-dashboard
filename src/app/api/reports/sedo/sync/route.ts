@@ -5,12 +5,16 @@
  * 
  * Fetches data from Sedo API and saves to database.
  * Supports upsert (update if exists, insert if new).
+ * 
+ * Admin users: see all domains
+ * Regular users: only see domains assigned to them
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { sedoClient } from "@/lib/sedo";
 import { saveSedoRevenue, getSedoRevenueSummary, syncToOverviewReport } from "@/lib/revenue-db";
+import { isAdmin } from "@/lib/roles";
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +29,7 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user.id;
+    const userIsAdmin = isAdmin((session.user as { role?: string }).role);
 
     // Check if Sedo API is configured
     const configStatus = sedoClient.getConfigStatus();
@@ -63,8 +68,11 @@ export async function POST(request: Request) {
     }
 
     // Save to database
-    console.log(`[Sedo Sync] Saving ${sedoData.data.length} records...`);
-    const saveResult = await saveSedoRevenue(sedoData.data, userId);
+    // Admin: save all data, Regular user: only save assigned domains
+    console.log(`[Sedo Sync] Saving ${sedoData.data.length} records (admin: ${userIsAdmin})...`);
+    const saveResult = await saveSedoRevenue(sedoData.data, userId, {
+      filterByAssignedDomains: !userIsAdmin,
+    });
 
     // Auto-sync to Overview Report
     console.log(`[Sedo Sync] Syncing to Overview Report...`);
@@ -80,6 +88,7 @@ export async function POST(request: Request) {
         fetched: sedoData.data.length,
         saved: saveResult.saved,
         updated: saveResult.updated,
+        skipped: saveResult.skipped,
         errors: saveResult.errors.length,
       },
       dateRange: sedoData.dateRange,
