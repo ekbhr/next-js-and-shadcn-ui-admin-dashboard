@@ -4,6 +4,7 @@
  * Dashboard Revenue Chart
  * 
  * Area chart showing daily revenue trend (all networks combined).
+ * Gross revenue is only shown to admin users.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +28,10 @@ interface DailyData {
 
 interface DashboardChartProps {
   dailyData: DailyData[];
+  showGrossRevenue?: boolean; // Only true for admin users
 }
 
-export function DashboardChart({ dailyData }: DashboardChartProps) {
+export function DashboardChart({ dailyData, showGrossRevenue = false }: DashboardChartProps) {
   // Format data for chart
   const chartData = dailyData.map((day) => ({
     date: new Date(day.date).toLocaleDateString("en-US", {
@@ -62,10 +64,12 @@ export function DashboardChart({ dailyData }: DashboardChartProps) {
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>
             <defs>
-              <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
+              {showGrossRevenue && (
+                <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              )}
               <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
                 <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
@@ -90,11 +94,13 @@ export function DashboardChart({ dailyData }: DashboardChartProps) {
                   return (
                     <div className="bg-background border rounded-lg shadow-lg p-3">
                       <p className="font-medium mb-2">{label}</p>
-                      <p className="text-sm text-blue-600">
-                        Gross: €{Number(payload[0]?.value ?? 0).toFixed(2)}
-                      </p>
+                      {showGrossRevenue && (
+                        <p className="text-sm text-blue-600">
+                          Gross: €{Number(payload[0]?.value ?? 0).toFixed(2)}
+                        </p>
+                      )}
                       <p className="text-sm text-green-600">
-                        Net: €{Number(payload[1]?.value ?? 0).toFixed(2)}
+                        Revenue: €{Number(showGrossRevenue ? payload[1]?.value : payload[0]?.value ?? 0).toFixed(2)}
                       </p>
                     </div>
                   );
@@ -102,14 +108,16 @@ export function DashboardChart({ dailyData }: DashboardChartProps) {
                 return null;
               }}
             />
-            <Area
-              type="monotone"
-              dataKey="gross"
-              stroke="#3b82f6"
-              fillOpacity={1}
-              fill="url(#colorGross)"
-              strokeWidth={2}
-            />
+            {showGrossRevenue && (
+              <Area
+                type="monotone"
+                dataKey="gross"
+                stroke="#3b82f6"
+                fillOpacity={1}
+                fill="url(#colorGross)"
+                strokeWidth={2}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="net"

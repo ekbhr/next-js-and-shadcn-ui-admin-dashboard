@@ -43,7 +43,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         name: session.user.name || "User",
         email: session.user.email || "",
         avatar: "",
-        role: "user",
+        role: session.user.role || "user", // Use actual role from session
       }
     : {
         id: "guest",

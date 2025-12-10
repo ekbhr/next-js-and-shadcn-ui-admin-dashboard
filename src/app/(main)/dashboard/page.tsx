@@ -3,6 +3,7 @@
  * 
  * Shows aggregated revenue data for current/last month.
  * All networks combined (no grouping by network).
+ * Gross revenue is only visible to admin users.
  */
 
 import type { Metadata } from "next";
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 };
 import { redirect } from "next/navigation";
 import { getDashboardSummary } from "@/lib/revenue-db";
+import { canViewGrossRevenue } from "@/lib/roles";
 import { DashboardCards } from "./_components/dashboard-cards";
 import { DashboardChart } from "./_components/dashboard-chart";
 import { TopDomains } from "./_components/top-domains";
@@ -32,6 +34,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const period = params.period === "last" ? "last" : "current";
   const data = await getDashboardSummary(session.user.id, period);
+  const showGrossRevenue = canViewGrossRevenue(session.user.role);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -47,15 +50,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       </div>
 
       {/* Summary Cards */}
-      <DashboardCards totals={data.totals} />
+      <DashboardCards totals={data.totals} showGrossRevenue={showGrossRevenue} />
 
       {/* Chart and Top Domains */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <DashboardChart dailyData={data.dailyData} />
+          <DashboardChart dailyData={data.dailyData} showGrossRevenue={showGrossRevenue} />
         </div>
         <div className="lg:col-span-1">
-          <TopDomains domains={data.topDomains} />
+          <TopDomains domains={data.topDomains} showGrossRevenue={showGrossRevenue} />
         </div>
       </div>
     </div>

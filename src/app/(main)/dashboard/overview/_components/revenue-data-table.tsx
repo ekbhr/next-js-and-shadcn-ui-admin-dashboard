@@ -43,9 +43,10 @@ interface RevenueRecord {
 
 interface RevenueDataTableProps {
   data: RevenueRecord[];
+  showGrossRevenue?: boolean; // Only true for admin users
 }
 
-export function RevenueDataTable({ data }: RevenueDataTableProps) {
+export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueDataTableProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
@@ -159,8 +160,8 @@ export function RevenueDataTable({ data }: RevenueDataTableProps) {
               <TableHead className="text-right">Impressions</TableHead>
               <TableHead className="text-right">Clicks</TableHead>
               <TableHead className="text-right">CTR</TableHead>
-              <TableHead className="text-right">Gross</TableHead>
-              <TableHead className="text-right">Net</TableHead>
+              {showGrossRevenue && <TableHead className="text-right">Gross</TableHead>}
+              <TableHead className="text-right">{showGrossRevenue ? "Net" : "Revenue"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -186,9 +187,11 @@ export function RevenueDataTable({ data }: RevenueDataTableProps) {
                 <TableCell className="text-right">
                   {record.ctr !== null ? `${record.ctr}%` : "-"}
                 </TableCell>
-                <TableCell className="text-right font-medium">
-                  €{record.grossRevenue.toFixed(2)}
-                </TableCell>
+                {showGrossRevenue && (
+                  <TableCell className="text-right font-medium">
+                    €{record.grossRevenue.toFixed(2)}
+                  </TableCell>
+                )}
                 <TableCell className="text-right font-medium text-green-600">
                   €{record.netRevenue.toFixed(2)}
                 </TableCell>

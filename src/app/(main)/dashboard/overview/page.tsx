@@ -3,6 +3,7 @@
  * 
  * Simple data table view with filters.
  * No charts or summary cards - just the raw data.
+ * Gross revenue is only visible to admin users.
  */
 
 import type { Metadata } from "next";
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 };
 import { redirect } from "next/navigation";
 import { getOverviewReport } from "@/lib/revenue-db";
+import { canViewGrossRevenue } from "@/lib/roles";
 import { RevenueDataTable } from "./_components/revenue-data-table";
 import { OverviewFilters } from "./_components/overview-filters";
 
@@ -32,6 +34,7 @@ export default async function OverviewPage({ searchParams }: PageProps) {
 
   const userId = session.user.id;
   const params = await searchParams;
+  const showGrossRevenue = canViewGrossRevenue(session.user.role);
   
   // Parse filter params
   const network = params.network || undefined;
@@ -69,7 +72,7 @@ export default async function OverviewPage({ searchParams }: PageProps) {
       </div>
 
       {/* Revenue DataTable with Pagination */}
-      <RevenueDataTable data={data} />
+      <RevenueDataTable data={data} showGrossRevenue={showGrossRevenue} />
     </div>
   );
 }

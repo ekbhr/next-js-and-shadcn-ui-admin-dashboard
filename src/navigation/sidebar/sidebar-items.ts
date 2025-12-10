@@ -13,6 +13,7 @@ export interface NavSubItem {
   comingSoon?: boolean;
   newTab?: boolean;
   isNew?: boolean;
+  adminOnly?: boolean;
 }
 
 export interface NavMainItem {
@@ -23,12 +24,14 @@ export interface NavMainItem {
   comingSoon?: boolean;
   newTab?: boolean;
   isNew?: boolean;
+  adminOnly?: boolean;
 }
 
 export interface NavGroup {
   id: number;
   label?: string;
   items: NavMainItem[];
+  adminOnly?: boolean; // If true, entire group is admin-only
 }
 
 export const sidebarItems: NavGroup[] = [
@@ -51,17 +54,20 @@ export const sidebarItems: NavGroup[] = [
   {
     id: 2,
     label: "Admin",
+    adminOnly: true, // Only visible to admin users
     items: [
       {
         title: "Domain Assignment",
         url: "/dashboard/admin/domains",
         icon: Globe,
+        adminOnly: true,
       },
       {
         title: "Settings",
         url: "/dashboard/admin/settings",
         icon: Settings,
         comingSoon: true,
+        adminOnly: true,
       },
     ],
   },

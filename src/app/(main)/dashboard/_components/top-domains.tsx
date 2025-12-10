@@ -2,6 +2,7 @@
  * Top Domains Card
  * 
  * Shows top performing domains by revenue.
+ * Gross revenue is only shown to admin users.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,9 +14,10 @@ interface TopDomainsProps {
     grossRevenue: number;
     netRevenue: number;
   }>;
+  showGrossRevenue?: boolean; // Only true for admin users
 }
 
-export function TopDomains({ domains }: TopDomainsProps) {
+export function TopDomains({ domains, showGrossRevenue = false }: TopDomainsProps) {
   if (domains.length === 0) {
     return (
       <Card className="h-full">
@@ -52,14 +54,16 @@ export function TopDomains({ domains }: TopDomainsProps) {
                   <p className="font-medium text-sm truncate max-w-[150px]">
                     {domain.domain}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Net: €{domain.netRevenue.toFixed(2)}
-                  </p>
+                  {showGrossRevenue && (
+                    <p className="text-xs text-muted-foreground">
+                      Net: €{domain.netRevenue.toFixed(2)}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-green-600">
-                  €{domain.grossRevenue.toFixed(2)}
+                  €{showGrossRevenue ? domain.grossRevenue.toFixed(2) : domain.netRevenue.toFixed(2)}
                 </p>
               </div>
             </div>

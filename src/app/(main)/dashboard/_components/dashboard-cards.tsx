@@ -2,6 +2,7 @@
  * Dashboard Summary Cards
  * 
  * Shows key metrics for the selected period.
+ * Gross revenue is only shown to admin users.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,21 +17,23 @@ interface DashboardCardsProps {
     ctr: number;
     rpm: number;
   };
+  showGrossRevenue?: boolean; // Only true for admin users
 }
 
-export function DashboardCards({ totals }: DashboardCardsProps) {
+export function DashboardCards({ totals, showGrossRevenue = false }: DashboardCardsProps) {
   const cards = [
-    {
+    // Gross Revenue - only for admins
+    ...(showGrossRevenue ? [{
       title: "Gross Revenue",
       value: `€${totals.grossRevenue.toFixed(2)}`,
       description: `RPM: €${totals.rpm.toFixed(2)}`,
       icon: DollarSign,
       color: "text-blue-600",
-    },
+    }] : []),
     {
-      title: "Net Revenue",
+      title: "Revenue",
       value: `€${totals.netRevenue.toFixed(2)}`,
-      description: "Your share (after revShare)",
+      description: showGrossRevenue ? "Your share (after revShare)" : "Total earnings",
       icon: TrendingUp,
       color: "text-green-600",
     },
@@ -51,7 +54,7 @@ export function DashboardCards({ totals }: DashboardCardsProps) {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className={`grid gap-4 md:grid-cols-2 ${showGrossRevenue ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
       {cards.map((card) => (
         <Card key={card.title}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

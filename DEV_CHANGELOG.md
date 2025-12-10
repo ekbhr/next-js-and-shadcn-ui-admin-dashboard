@@ -8,6 +8,39 @@ This file tracks all development changes and updates to the RevEngine Reporting 
 
 ## [Unreleased]
 
+### 2025-12-10 - Role-Based Access Control (RBAC) Implementation
+
+#### Features Added
+- **User roles** - Added `role` field to User model ("admin" or "user")
+- **Admin-only sections** - Admin section in sidebar hidden for non-admin users
+- **Gross revenue visibility** - Only admin users can see gross revenue; regular users only see net revenue
+
+#### Files Created
+- `src/lib/roles.ts` - Role utilities (isAdmin, canViewGrossRevenue, canAccessAdminSection)
+- `src/app/(main)/dashboard/unauthorized/page.tsx` - Unauthorized access page
+
+#### Files Modified
+- `prisma/schema.prisma` - Added `role` field with default "user"
+- `src/lib/auth.ts` - Added role to JWT token and session, removed console logs
+- `src/types/next-auth.d.ts` - Added role to Session and JWT types
+- `src/navigation/sidebar/sidebar-items.ts` - Added `adminOnly` flag to admin sections
+- `src/app/(main)/dashboard/_components/sidebar/app-sidebar.tsx` - Filter items by role
+- `src/app/(main)/dashboard/layout.tsx` - Pass role from session to sidebar
+- `src/app/(main)/dashboard/page.tsx` - Pass showGrossRevenue to components
+- `src/app/(main)/dashboard/overview/page.tsx` - Pass showGrossRevenue to data table
+- `src/app/(main)/dashboard/admin/domains/page.tsx` - Added admin-only check
+- `src/app/(main)/dashboard/_components/dashboard-cards.tsx` - Conditional gross revenue
+- `src/app/(main)/dashboard/_components/dashboard-chart.tsx` - Conditional gross revenue line
+- `src/app/(main)/dashboard/_components/top-domains.tsx` - Conditional gross revenue display
+- `src/app/(main)/dashboard/overview/_components/revenue-data-table.tsx` - Conditional column
+
+#### Security Notes
+- Admin routes redirect to `/dashboard/unauthorized` for non-admin users
+- Data isolation: Users can only see their own data (already implemented via userId)
+- Gross revenue is business-sensitive data, hidden from regular users
+
+---
+
 ### 2025-12-09 - Critical Security Update & Prisma 7 Migration
 
 #### Security Fix

@@ -2,6 +2,7 @@
  * Domain Assignment Management Page
  * 
  * Allows admins to view and edit revShare settings per domain.
+ * Admin-only page - regular users cannot access.
  */
 
 import type { Metadata } from "next";
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 };
 import { redirect } from "next/navigation";
 import { getDomainAssignments } from "@/lib/revenue-db";
+import { isAdmin } from "@/lib/roles";
 import { DomainTable } from "./_components/domain-table";
 import { SyncButton } from "./_components/sync-button";
 
@@ -20,6 +22,11 @@ export default async function DomainsPage() {
   
   if (!session?.user?.id) {
     redirect("/login");
+  }
+
+  // Admin-only page
+  if (!isAdmin(session.user.role)) {
+    redirect("/dashboard/unauthorized");
   }
 
   const assignments = await getDomainAssignments(session.user.id);
