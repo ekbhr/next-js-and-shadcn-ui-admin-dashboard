@@ -13,6 +13,7 @@ import { isAdmin } from "@/lib/roles";
 import { AdminReportTable } from "./_components/admin-report-table";
 import { AdminReportSummary } from "./_components/admin-report-summary";
 import { CleanupButton } from "./_components/cleanup-button";
+import { SyncDataButton } from "./_components/sync-data-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Admin Report",
@@ -151,7 +152,10 @@ export default async function AdminReportPage() {
             Revenue overview across all users (last 31 days)
           </p>
         </div>
-        <CleanupButton />
+        <div className="flex items-center gap-2">
+          <SyncDataButton />
+          <CleanupButton />
+        </div>
       </div>
 
       {/* Summary Cards */}
