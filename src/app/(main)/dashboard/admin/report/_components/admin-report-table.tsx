@@ -1,6 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  VisibilityState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Table,
   TableBody,
@@ -16,10 +28,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Users, FileText } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Users,
+  FileText,
+  Download,
+  ArrowUpDown,
+  SlidersHorizontal,
+} from "lucide-react";
+import { exportToCSV } from "@/lib/export-utils";
 
 interface Report {
   id: string;
@@ -53,33 +83,351 @@ interface AdminReportTableProps {
   userTotals: UserTotal[];
 }
 
-const ITEMS_PER_PAGE = 20;
+// User Totals Table Columns
+const userColumns: ColumnDef<UserTotal>[] = [
+  {
+    accessorKey: "userName",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        User
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div>
+        <p className="font-medium">{row.original.userName || "No name"}</p>
+        <p className="text-sm text-muted-foreground">{row.original.userEmail}</p>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "domainCount",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Domains
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => <div className="text-right">{row.original.domainCount}</div>,
+  },
+  {
+    accessorKey: "impressions",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Impressions
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right">{row.original.impressions.toLocaleString()}</div>
+    ),
+  },
+  {
+    accessorKey: "clicks",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Clicks
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right">{row.original.clicks.toLocaleString()}</div>
+    ),
+  },
+  {
+    accessorKey: "grossRevenue",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Gross Revenue
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-blue-600">
+        €{row.original.grossRevenue.toFixed(2)}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "netRevenue",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Net Revenue
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-green-600">
+        €{row.original.netRevenue.toFixed(2)}
+      </div>
+    ),
+  },
+];
+
+// Detailed Records Table Columns
+const reportColumns: ColumnDef<Report>[] = [
+  {
+    accessorKey: "date",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Date
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="font-medium">
+        {new Date(row.original.date).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "userName",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        User
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <span className="text-sm">{row.original.userName || row.original.userEmail}</span>
+    ),
+    filterFn: (row, id, value) => {
+      const userName = row.original.userName || row.original.userEmail;
+      return userName.toLowerCase().includes(value.toLowerCase());
+    },
+  },
+  {
+    accessorKey: "network",
+    header: "Network",
+    cell: ({ row }) => (
+      <Badge
+        className={
+          row.original.network === "sedo"
+            ? "bg-blue-500"
+            : row.original.network === "google"
+            ? "bg-green-500"
+            : "bg-gray-500"
+        }
+      >
+        {row.original.network.toUpperCase()}
+      </Badge>
+    ),
+    filterFn: (row, id, value) => {
+      return row.original.network.toLowerCase().includes(value.toLowerCase());
+    },
+  },
+  {
+    accessorKey: "domain",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Domain
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="max-w-[150px] truncate">{row.original.domain || "All"}</div>
+    ),
+    filterFn: (row, id, value) => {
+      const domain = row.original.domain || "All";
+      return domain.toLowerCase().includes(value.toLowerCase());
+    },
+  },
+  {
+    accessorKey: "impressions",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Impressions
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right">{row.original.impressions.toLocaleString()}</div>
+    ),
+  },
+  {
+    accessorKey: "clicks",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Clicks
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right">{row.original.clicks.toLocaleString()}</div>
+    ),
+  },
+  {
+    accessorKey: "grossRevenue",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Gross
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-blue-600">
+        €{row.original.grossRevenue.toFixed(2)}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "netRevenue",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        Net
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-green-600">
+        €{row.original.netRevenue.toFixed(2)}
+      </div>
+    ),
+  },
+];
 
 export function AdminReportTable({ reports, userTotals }: AdminReportTableProps) {
-  const [currentPage, setCurrentPage] = useState(1);
+  // User table state
+  const [userSorting, setUserSorting] = useState<SortingState>([]);
+  const [userColumnVisibility, setUserColumnVisibility] = useState<VisibilityState>({});
 
-  const totalPages = Math.ceil(reports.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedReports = reports.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  // Report table state
+  const [reportSorting, setReportSorting] = useState<SortingState>([
+    { id: "date", desc: true },
+  ]);
+  const [reportFilters, setReportFilters] = useState<ColumnFiltersState>([]);
+  const [reportColumnVisibility, setReportColumnVisibility] = useState<VisibilityState>({});
+  const [globalFilter, setGlobalFilter] = useState("");
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+  // User totals table
+  const userTable = useReactTable({
+    data: userTotals,
+    columns: userColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setUserSorting,
+    onColumnVisibilityChange: setUserColumnVisibility,
+    state: {
+      sorting: userSorting,
+      columnVisibility: userColumnVisibility,
+    },
+  });
+
+  // Reports table
+  const reportTable = useReactTable({
+    data: reports,
+    columns: reportColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    onSortingChange: setReportSorting,
+    onColumnFiltersChange: setReportFilters,
+    onColumnVisibilityChange: setReportColumnVisibility,
+    onGlobalFilterChange: setGlobalFilter,
+    state: {
+      sorting: reportSorting,
+      columnFilters: reportFilters,
+      columnVisibility: reportColumnVisibility,
+      globalFilter,
+    },
+    initialState: {
+      pagination: {
+        pageSize: 20,
+      },
+    },
+  });
+
+  // Export functions
+  const exportUserTotals = () => {
+    exportToCSV(
+      userTotals,
+      [
+        { key: "userName", header: "Name" },
+        { key: "userEmail", header: "Email" },
+        { key: "domainCount", header: "Domains" },
+        { key: "impressions", header: "Impressions" },
+        { key: "clicks", header: "Clicks" },
+        { key: "grossRevenue", header: "Gross Revenue (EUR)" },
+        { key: "netRevenue", header: "Net Revenue (EUR)" },
+      ],
+      `revenue-by-user-${new Date().toISOString().split("T")[0]}`
+    );
   };
 
-  const getNetworkColor = (network: string) => {
-    switch (network.toLowerCase()) {
-      case "sedo":
-        return "bg-blue-500";
-      case "yandex":
-        return "bg-red-500";
-      case "google":
-        return "bg-green-500";
-      default:
-        return "bg-gray-500";
-    }
+  const exportReports = () => {
+    // Export filtered data
+    const filteredData = reportTable.getFilteredRowModel().rows.map((row) => ({
+      ...row.original,
+      date: new Date(row.original.date).toISOString().split("T")[0],
+    }));
+
+    exportToCSV(
+      filteredData,
+      [
+        { key: "date", header: "Date" },
+        { key: "userName", header: "User" },
+        { key: "userEmail", header: "Email" },
+        { key: "network", header: "Network" },
+        { key: "domain", header: "Domain" },
+        { key: "impressions", header: "Impressions" },
+        { key: "clicks", header: "Clicks" },
+        { key: "grossRevenue", header: "Gross Revenue (EUR)" },
+        { key: "netRevenue", header: "Net Revenue (EUR)" },
+      ],
+      `revenue-details-${new Date().toISOString().split("T")[0]}`
+    );
   };
 
   return (
@@ -98,51 +446,70 @@ export function AdminReportTable({ reports, userTotals }: AdminReportTableProps)
       {/* User Totals Tab */}
       <TabsContent value="users">
         <Card>
-          <CardHeader>
-            <CardTitle>Revenue by User</CardTitle>
-            <CardDescription>
-              Aggregated totals for each user
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Revenue by User</CardTitle>
+              <CardDescription>Aggregated totals for each user</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {userTable
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={exportUserTotals}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead className="text-right">Domains</TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">Gross Revenue</TableHead>
-                  <TableHead className="text-right">Net Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {userTotals.map((user) => (
-                  <TableRow key={user.userId}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{user.userName || "No name"}</p>
-                        <p className="text-sm text-muted-foreground">{user.userEmail}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{user.domainCount}</TableCell>
-                    <TableCell className="text-right">
-                      {user.impressions.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {user.clicks.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-blue-600">
-                      €{user.grossRevenue.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-green-600">
-                      €{user.netRevenue.toFixed(2)}
-                    </TableCell>
+                {userTable.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 ))}
-                {userTotals.length === 0 && (
+              </TableHeader>
+              <TableBody>
+                {userTable.getRowModel().rows.length ? (
+                  userTable.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={userColumns.length} className="h-24 text-center">
                       No data available
                     </TableCell>
                   </TableRow>
@@ -156,102 +523,147 @@ export function AdminReportTable({ reports, userTotals }: AdminReportTableProps)
       {/* Detailed Records Tab */}
       <TabsContent value="details">
         <Card>
-          <CardHeader>
-            <CardTitle>Detailed Revenue Records ({reports.length})</CardTitle>
-            <CardDescription>
-              Individual revenue records from all users
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Detailed Revenue Records ({reportTable.getFilteredRowModel().rows.length})</CardTitle>
+              <CardDescription>Individual revenue records from all users</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {reportTable
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={exportReports}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Network</TableHead>
-                  <TableHead>Domain</TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedReports.map((report) => (
-                  <TableRow key={report.id}>
-                    <TableCell className="font-medium">
-                      {formatDate(report.date)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {report.userName || report.userEmail}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={getNetworkColor(report.network)}>
-                        {report.network.toUpperCase()}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[150px] truncate">
-                      {report.domain || "All"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {report.impressions.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {report.clicks.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-blue-600">
-                      €{report.grossRevenue.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-green-600">
-                      €{report.netRevenue.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {paginatedReports.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No records found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            {/* Search/Filter */}
+            <div className="flex items-center py-4 gap-4">
+              <Input
+                placeholder="Search all columns..."
+                value={globalFilter ?? ""}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                className="max-w-sm"
+              />
+              <Input
+                placeholder="Filter by domain..."
+                value={(reportTable.getColumn("domain")?.getFilterValue() as string) ?? ""}
+                onChange={(e) => reportTable.getColumn("domain")?.setFilterValue(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
+
+            {/* Table */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  {reportTable.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {reportTable.getRowModel().rows.length ? (
+                    reportTable.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={reportColumns.length} className="h-24 text-center">
+                        No records found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, reports.length)} of {reports.length}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+            <div className="flex items-center justify-between py-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {reportTable.getState().pagination.pageIndex * reportTable.getState().pagination.pageSize + 1}-
+                {Math.min(
+                  (reportTable.getState().pagination.pageIndex + 1) * reportTable.getState().pagination.pageSize,
+                  reportTable.getFilteredRowModel().rows.length
+                )}{" "}
+                of {reportTable.getFilteredRowModel().rows.length} records
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reportTable.setPageIndex(0)}
+                  disabled={!reportTable.getCanPreviousPage()}
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reportTable.previousPage()}
+                  disabled={!reportTable.getCanPreviousPage()}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Page {reportTable.getState().pagination.pageIndex + 1} of {reportTable.getPageCount()}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reportTable.nextPage()}
+                  disabled={!reportTable.getCanNextPage()}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reportTable.setPageIndex(reportTable.getPageCount() - 1)}
+                  disabled={!reportTable.getCanNextPage()}
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
     </Tabs>
   );
 }
-

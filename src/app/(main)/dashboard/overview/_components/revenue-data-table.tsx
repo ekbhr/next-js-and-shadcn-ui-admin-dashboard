@@ -1,12 +1,24 @@
 "use client";
 
 /**
- * Revenue DataTable with Pagination
+ * Revenue DataTable with TanStack Table
  * 
- * Full-featured table with sorting, pagination, and search.
+ * Full-featured table with sorting, filtering, pagination, and CSV export.
  */
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  VisibilityState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Table,
   TableBody,
@@ -20,13 +32,29 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Search,
+  Download,
+  ArrowUpDown,
+  SlidersHorizontal,
+} from "lucide-react";
+import { exportToCSV } from "@/lib/export-utils";
 
 interface RevenueRecord {
   id: string;
@@ -43,51 +71,240 @@ interface RevenueRecord {
 
 interface RevenueDataTableProps {
   data: RevenueRecord[];
-  showGrossRevenue?: boolean; // Only true for admin users
+  showGrossRevenue?: boolean;
 }
 
-export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueDataTableProps) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState("");
+// Network badge color
+const getNetworkColor = (network: string) => {
+  switch (network.toLowerCase()) {
+    case "sedo":
+      return "bg-blue-500 hover:bg-blue-600";
+    case "yandex":
+      return "bg-red-500 hover:bg-red-600";
+    case "google":
+      return "bg-green-500 hover:bg-green-600";
+    default:
+      return "bg-gray-500 hover:bg-gray-600";
+  }
+};
 
-  // Filter data by search
-  const filteredData = useMemo(() => {
-    if (!search) return data;
-    const searchLower = search.toLowerCase();
-    return data.filter(
-      (record) =>
-        record.domain?.toLowerCase().includes(searchLower) ||
-        record.network.toLowerCase().includes(searchLower)
-    );
-  }, [data, search]);
+// Create columns dynamically based on showGrossRevenue
+const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] => {
+  const columns: ColumnDef<RevenueRecord>[] = [
+    {
+      accessorKey: "date",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Date
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="font-medium">
+          {new Date(row.original.date).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "network",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Network
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <Badge className={getNetworkColor(row.original.network)}>
+          {row.original.network.toUpperCase()}
+        </Badge>
+      ),
+      filterFn: (row, id, value) => {
+        return row.original.network.toLowerCase().includes(value.toLowerCase());
+      },
+    },
+    {
+      accessorKey: "domain",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Domain
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="max-w-[200px] truncate">
+          {row.original.domain || "All Domains"}
+        </div>
+      ),
+      filterFn: (row, id, value) => {
+        const domain = row.original.domain || "All Domains";
+        return domain.toLowerCase().includes(value.toLowerCase());
+      },
+    },
+    {
+      accessorKey: "impressions",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-end w-full"
+        >
+          Impressions
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="text-right">{row.original.impressions.toLocaleString()}</div>
+      ),
+    },
+    {
+      accessorKey: "clicks",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-end w-full"
+        >
+          Clicks
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="text-right">{row.original.clicks.toLocaleString()}</div>
+      ),
+    },
+    {
+      accessorKey: "ctr",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-end w-full"
+        >
+          CTR
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="text-right">
+          {row.original.ctr !== null ? `${row.original.ctr}%` : "-"}
+        </div>
+      ),
+    },
+  ];
 
-  // Paginate
-  const totalPages = Math.ceil(filteredData.length / pageSize);
-  const startIndex = (page - 1) * pageSize;
-  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
-
-  // Format date
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
+  // Add gross revenue column for admins
+  if (showGrossRevenue) {
+    columns.push({
+      accessorKey: "grossRevenue",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="justify-end w-full"
+        >
+          Gross
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div className="text-right font-medium text-blue-600">
+          €{row.original.grossRevenue.toFixed(2)}
+        </div>
+      ),
     });
-  };
+  }
 
-  // Network badge color
-  const getNetworkColor = (network: string) => {
-    switch (network.toLowerCase()) {
-      case "sedo":
-        return "bg-blue-500 hover:bg-blue-600";
-      case "yandex":
-        return "bg-red-500 hover:bg-red-600";
-      case "google":
-        return "bg-green-500 hover:bg-green-600";
-      default:
-        return "bg-gray-500 hover:bg-gray-600";
+  // Net revenue column
+  columns.push({
+    accessorKey: "netRevenue",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="justify-end w-full"
+      >
+        {showGrossRevenue ? "Net" : "Revenue"}
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-green-600">
+        €{row.original.netRevenue.toFixed(2)}
+      </div>
+    ),
+  });
+
+  return columns;
+};
+
+export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueDataTableProps) {
+  const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [globalFilter, setGlobalFilter] = useState("");
+
+  const columns = createColumns(showGrossRevenue);
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onGlobalFilterChange: setGlobalFilter,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+      globalFilter,
+    },
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  });
+
+  // Export function
+  const handleExport = () => {
+    const filteredData = table.getFilteredRowModel().rows.map((row) => ({
+      ...row.original,
+      date: new Date(row.original.date).toISOString().split("T")[0],
+      domain: row.original.domain || "All Domains",
+    }));
+
+    const exportColumns = [
+      { key: "date" as const, header: "Date" },
+      { key: "network" as const, header: "Network" },
+      { key: "domain" as const, header: "Domain" },
+      { key: "impressions" as const, header: "Impressions" },
+      { key: "clicks" as const, header: "Clicks" },
+      { key: "ctr" as const, header: "CTR %" },
+    ];
+
+    if (showGrossRevenue) {
+      exportColumns.push({ key: "grossRevenue" as const, header: "Gross Revenue (EUR)" });
     }
+    exportColumns.push({ key: "netRevenue" as const, header: "Net Revenue (EUR)" });
+
+    exportToCSV(filteredData, exportColumns, `revenue-overview-${new Date().toISOString().split("T")[0]}`);
   };
 
   if (data.length === 0) {
@@ -112,30 +329,50 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
           <div className="flex items-center justify-between">
             <CardTitle>Revenue Details</CardTitle>
             <span className="text-sm text-muted-foreground">
-              {filteredData.length} records
+              {table.getFilteredRowModel().rows.length} records
             </span>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by domain or network..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
+                placeholder="Search all columns..."
+                value={globalFilter ?? ""}
+                onChange={(e) => setGlobalFilter(e.target.value)}
                 className="pl-10"
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <SlidersHorizontal className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {table
+                    .getAllColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
               <Select
-                value={pageSize.toString()}
-                onValueChange={(value) => {
-                  setPageSize(parseInt(value));
-                  setPage(1);
-                }}
+                value={table.getState().pagination.pageSize.toString()}
+                onValueChange={(value) => table.setPageSize(parseInt(value))}
               >
                 <SelectTrigger className="w-[70px]">
                   <SelectValue />
@@ -151,110 +388,92 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
         </div>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Network</TableHead>
-              <TableHead>Domain</TableHead>
-              <TableHead className="text-right">Impressions</TableHead>
-              <TableHead className="text-right">Clicks</TableHead>
-              <TableHead className="text-right">CTR</TableHead>
-              {showGrossRevenue && <TableHead className="text-right">Gross</TableHead>}
-              <TableHead className="text-right">{showGrossRevenue ? "Net" : "Revenue"}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedData.map((record) => (
-              <TableRow key={record.id}>
-                <TableCell className="font-medium">
-                  {formatDate(record.date)}
-                </TableCell>
-                <TableCell>
-                  <Badge className={getNetworkColor(record.network)}>
-                    {record.network.toUpperCase()}
-                  </Badge>
-                </TableCell>
-                <TableCell className="max-w-[200px] truncate">
-                  {record.domain || "All Domains"}
-                </TableCell>
-                <TableCell className="text-right">
-                  {record.impressions.toLocaleString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  {record.clicks.toLocaleString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  {record.ctr !== null ? `${record.ctr}%` : "-"}
-                </TableCell>
-                {showGrossRevenue && (
-                  <TableCell className="text-right font-medium">
-                    €{record.grossRevenue.toFixed(2)}
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                    No results found
                   </TableCell>
-                )}
-                <TableCell className="text-right font-medium text-green-600">
-                  €{record.netRevenue.toFixed(2)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
         {/* Pagination */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 pt-4 border-t">
           <p className="text-sm text-muted-foreground">
-            Showing {startIndex + 1}-{Math.min(startIndex + pageSize, filteredData.length)} of {filteredData.length}
+            Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-
+            {Math.min(
+              (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+              table.getFilteredRowModel().rows.length
+            )}{" "}
+            of {table.getFilteredRowModel().rows.length}
           </p>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="h-8 w-8"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-1 px-2">
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let pageNum: number;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (page <= 3) {
-                    pageNum = i + 1;
-                  } else if (page >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = page - 2 + i;
-                  }
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={page === pageNum ? "default" : "ghost"}
-                      size="icon"
-                      onClick={() => setPage(pageNum)}
-                      className="h-8 w-8 text-xs"
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="h-8 w-8"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm px-2">
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
-
