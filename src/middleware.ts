@@ -1,24 +1,18 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth";
 
-export async function middleware(request: NextRequest) {
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-  });
+export default auth((req) => {
+  const { nextUrl } = req;
+  const isLoggedIn = !!req.auth;
 
-  const { pathname } = request.nextUrl;
-
-  // If no token and trying to access protected route, redirect to login
-  if (!token && pathname.startsWith("/dashboard")) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+  // If not logged in and trying to access dashboard, redirect to login
+  if (!isLoggedIn && nextUrl.pathname.startsWith("/dashboard")) {
+    const loginUrl = new URL("/login", nextUrl.origin);
+    loginUrl.searchParams.set("callbackUrl", nextUrl.pathname);
+    return Response.redirect(loginUrl);
   }
 
-  return NextResponse.next();
-}
+  return;
+});
 
 export const config = {
   matcher: ["/dashboard/:path*"],
