@@ -10,11 +10,6 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // If user is logged in and tries to access login/register, redirect to dashboard
-  if (token && (pathname === "/login" || pathname === "/register")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
   // If no token and trying to access protected route, redirect to login
   if (!token && pathname.startsWith("/dashboard")) {
     const loginUrl = new URL("/login", request.url);
@@ -26,6 +21,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/register"],
+  matcher: ["/dashboard/:path*"],
 };
 

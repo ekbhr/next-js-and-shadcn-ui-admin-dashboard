@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { Command } from "lucide-react";
 
-import { auth } from "@/lib/auth";
 import { RegisterForm } from "../auth/_components/register-form";
 import { GoogleButton } from "../auth/_components/social-auth/google-button";
 
@@ -12,12 +10,7 @@ export const metadata: Metadata = {
   title: "RevEngine Media - Register",
 };
 
-export default async function Register() {
-  // If user is already logged in, redirect to dashboard
-  const session = await auth();
-  if (session?.user) {
-    redirect("/dashboard");
-  }
+export default function Register() {
   return (
     <div className="flex h-dvh">
       <div className="bg-background flex w-full items-center justify-center p-8 lg:w-2/3">
