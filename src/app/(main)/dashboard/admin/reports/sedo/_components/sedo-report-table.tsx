@@ -41,8 +41,8 @@ interface SedoReport {
   netRevenue: number;
   impressions: number;
   clicks: number;
-  ctr: number;
-  rpm: number;
+  ctr: number | null;
+  rpm: number | null;
   userId: string;
   userName: string | null;
   userEmail: string;
@@ -367,7 +367,7 @@ export function SedoReportTable({ reports, domainTotals, userTotals }: SedoRepor
     {
       accessorKey: "ctr",
       header: "CTR",
-      cell: ({ row }) => `${row.original.ctr.toFixed(2)}%`,
+      cell: ({ row }) => `${(row.original.ctr ?? 0).toFixed(2)}%`,
     },
   ], []);
 
