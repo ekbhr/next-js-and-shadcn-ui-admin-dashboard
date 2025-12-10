@@ -14,10 +14,12 @@ export function GoogleButton({ className, ...props }: React.ComponentProps<typeo
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
+      await signIn("google", { 
+        callbackUrl: "/dashboard",
+        redirect: true,
+      });
     } catch (error) {
       console.error("Google sign-in error:", error);
-    } finally {
       setIsLoading(false);
     }
   };

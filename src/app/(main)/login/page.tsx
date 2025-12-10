@@ -1,16 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Command } from "lucide-react";
+
+import { auth } from "@/lib/auth";
+import { LoginForm } from "../auth/_components/login-form";
+import { GoogleButton } from "../auth/_components/social-auth/google-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Login",
 };
 
-import { LoginForm } from "../auth/_components/login-form";
-import { GoogleButton } from "../auth/_components/social-auth/google-button";
-
-export default function Login() {
+export default async function Login() {
+  // If user is already logged in, redirect to dashboard
+  const session = await auth();
+  if (session?.user) {
+    redirect("/dashboard");
+  }
   return (
     <div className="flex h-dvh">
       <div className="bg-primary hidden lg:block lg:w-1/3">
