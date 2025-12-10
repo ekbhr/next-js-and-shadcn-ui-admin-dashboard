@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { signOut } from "next-auth/react";
 import { BadgeCheck, Bell, CreditCard, LogOut } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -73,7 +74,7 @@ export function AccountSwitcher({
         </DropdownMenuGroup>
         */}
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
           <LogOut />
           Log out
         </DropdownMenuItem>
