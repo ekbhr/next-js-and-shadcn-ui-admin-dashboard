@@ -34,6 +34,29 @@ export async function getRevShare(
 }
 
 /**
+ * OPTIMIZED: Get all domain assignments in one query
+ * Returns a Map of domain -> { userId, revShare }
+ * This eliminates N+1 queries when saving revenue data
+ */
+export async function getAllDomainAssignmentsMap(
+  network: string
+): Promise<Map<string, { userId: string; revShare: number }>> {
+  const assignments = await prisma.domain_Assignment.findMany({
+    where: { network, isActive: true },
+    select: { domain: true, userId: true, revShare: true },
+  });
+
+  const map = new Map<string, { userId: string; revShare: number }>();
+  for (const a of assignments) {
+    map.set(a.domain.toLowerCase().trim(), {
+      userId: a.userId,
+      revShare: a.revShare,
+    });
+  }
+  return map;
+}
+
+/**
  * Calculate net revenue from gross revenue and revShare
  */
 export function calculateNetRevenue(grossRevenue: number, revShare: number): number {
@@ -66,21 +89,24 @@ export async function saveSedoRevenue(
   // Default: save to domain owner
   const saveToDomainOwner = options.saveToDomainOwner !== false;
 
-  // Get all domain owners for efficient lookup
-  const domainOwners = saveToDomainOwner ? await getAllDomainOwners("sedo") : new Map();
+  // OPTIMIZED: Get all domain assignments in ONE query (userId + revShare)
+  // This eliminates N+1 queries - we now fetch everything upfront
+  const domainAssignments = await getAllDomainAssignmentsMap("sedo");
 
   for (const item of data) {
     try {
       const domainValue = item.domain || null;
       const normalizedDomain = domainValue?.toLowerCase().trim();
 
-      // Determine which user should own this data
+      // Determine which user should own this data and get revShare
       let targetUserId = fallbackUserId;
+      let revShare = DEFAULT_REV_SHARE;
       
       if (saveToDomainOwner && normalizedDomain) {
-        const ownerId = domainOwners.get(normalizedDomain);
-        if (ownerId) {
-          targetUserId = ownerId;
+        const assignment = domainAssignments.get(normalizedDomain);
+        if (assignment) {
+          targetUserId = assignment.userId;
+          revShare = assignment.revShare;
         } else if (options.filterByAssignedDomains) {
           // Domain not assigned to anyone - skip if filtering is enabled
           skipped++;
@@ -93,8 +119,7 @@ export async function saveSedoRevenue(
         continue;
       }
 
-      // Get revShare for this domain
-      const revShare = await getRevShare(targetUserId, domainValue, "sedo");
+      // Calculate net revenue (no DB call needed now!)
       const netRevenue = calculateNetRevenue(item.revenue, revShare);
 
       // Parse date - ensure it's a valid date
@@ -885,20 +910,24 @@ export async function saveYandexRevenue(
   const errors: string[] = [];
 
   const saveToDomainOwner = options.saveToDomainOwner !== false;
-  const domainOwners = saveToDomainOwner ? await getAllDomainOwners("yandex") : new Map();
+  
+  // OPTIMIZED: Get all domain assignments in ONE query (userId + revShare)
+  const domainAssignments = await getAllDomainAssignmentsMap("yandex");
 
   for (const item of data) {
     try {
       const domainValue = item.domain || null;
       const normalizedDomain = domainValue?.toLowerCase().trim();
 
-      // Determine target user
+      // Determine target user and revShare
       let targetUserId = fallbackUserId;
+      let revShare = DEFAULT_REV_SHARE;
       
       if (saveToDomainOwner && normalizedDomain) {
-        const ownerId = domainOwners.get(normalizedDomain);
-        if (ownerId) {
-          targetUserId = ownerId;
+        const assignment = domainAssignments.get(normalizedDomain);
+        if (assignment) {
+          targetUserId = assignment.userId;
+          revShare = assignment.revShare;
         } else if (options.filterByAssignedDomains) {
           skipped++;
           continue;
@@ -908,8 +937,7 @@ export async function saveYandexRevenue(
         continue;
       }
 
-      // Get revShare
-      const revShare = await getRevShare(targetUserId, domainValue, "yandex");
+      // Calculate net revenue (no DB call needed now!)
       const netRevenue = calculateNetRevenue(item.revenue, revShare);
 
       // Parse date
