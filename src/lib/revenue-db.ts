@@ -681,6 +681,43 @@ export async function getDashboardSummary(
     totals.clicks += day.clicks;
   }
 
+  // Calculate totals by network
+  const networkMap = new Map<string, {
+    network: string;
+    grossRevenue: number;
+    netRevenue: number;
+    impressions: number;
+    clicks: number;
+  }>();
+
+  for (const record of data) {
+    const network = record.network || "unknown";
+    const existing = networkMap.get(network);
+
+    if (existing) {
+      existing.grossRevenue += record.grossRevenue;
+      existing.netRevenue += record.netRevenue;
+      existing.impressions += record.impressions;
+      existing.clicks += record.clicks;
+    } else {
+      networkMap.set(network, {
+        network,
+        grossRevenue: record.grossRevenue,
+        netRevenue: record.netRevenue,
+        impressions: record.impressions,
+        clicks: record.clicks,
+      });
+    }
+  }
+
+  const byNetwork = Array.from(networkMap.values()).map((n) => ({
+    network: n.network,
+    grossRevenue: Math.round(n.grossRevenue * 100) / 100,
+    netRevenue: Math.round(n.netRevenue * 100) / 100,
+    impressions: n.impressions,
+    clicks: n.clicks,
+  }));
+
   // Get top domains
   const domainMap = new Map<string, {
     domain: string;
@@ -726,6 +763,7 @@ export async function getDashboardSummary(
         ? Math.round((totals.grossRevenue / totals.impressions) * 1000 * 100) / 100 
         : 0,
     },
+    byNetwork, // Network breakdown
     dailyData,
     topDomains,
   };

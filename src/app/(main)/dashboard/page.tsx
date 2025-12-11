@@ -50,7 +50,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       </div>
 
       {/* Summary Cards */}
-      <DashboardCards totals={data.totals} showGrossRevenue={showGrossRevenue} />
+      <DashboardCards 
+        totals={data.totals} 
+        byNetwork={data.byNetwork}
+        showGrossRevenue={showGrossRevenue} 
+      />
 
       {/* Chart and Top Domains */}
       <div className="grid gap-6 lg:grid-cols-3">

@@ -3,10 +3,20 @@
  * 
  * Shows key metrics for the selected period.
  * Gross revenue is only shown to admin users.
+ * Network breakdown shows revenue by network (Sedo, Yandex, etc.)
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingUp, Eye, MousePointer } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+interface NetworkData {
+  network: string;
+  grossRevenue: number;
+  netRevenue: number;
+  impressions: number;
+  clicks: number;
+}
 
 interface DashboardCardsProps {
   totals: {
@@ -17,10 +27,29 @@ interface DashboardCardsProps {
     ctr: number;
     rpm: number;
   };
+  byNetwork?: NetworkData[];
   showGrossRevenue?: boolean; // Only true for admin users
 }
 
-export function DashboardCards({ totals, showGrossRevenue = false }: DashboardCardsProps) {
+// Network display config
+const networkConfig: Record<string, { label: string; color: string }> = {
+  sedo: { label: "Sedo", color: "bg-blue-100 text-blue-800" },
+  yandex: { label: "Yandex", color: "bg-orange-100 text-orange-800" },
+  google: { label: "Google", color: "bg-green-100 text-green-800" },
+  unknown: { label: "Other", color: "bg-gray-100 text-gray-800" },
+};
+
+export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = false }: DashboardCardsProps) {
+  // Format network breakdown for display
+  const networkBreakdown = byNetwork.map((n) => {
+    const config = networkConfig[n.network] || networkConfig.unknown;
+    return {
+      ...n,
+      label: config.label,
+      badgeClass: config.color,
+    };
+  }).sort((a, b) => b.netRevenue - a.netRevenue);
+
   const cards = [
     // Gross Revenue - only for admins
     ...(showGrossRevenue ? [{
@@ -54,19 +83,48 @@ export function DashboardCards({ totals, showGrossRevenue = false }: DashboardCa
   ];
 
   return (
-    <div className={`grid gap-4 md:grid-cols-2 ${showGrossRevenue ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-      {cards.map((card) => (
-        <Card key={card.title}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-            <card.icon className={`h-4 w-4 ${card.color}`} />
+    <div className="space-y-4">
+      {/* Main metrics cards */}
+      <div className={`grid gap-4 md:grid-cols-2 ${showGrossRevenue ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+        {cards.map((card) => (
+          <Card key={card.title}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+              <card.icon className={`h-4 w-4 ${card.color}`} />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+              <p className="text-xs text-muted-foreground">{card.description}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Network breakdown */}
+      {networkBreakdown.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Revenue by Network</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-            <p className="text-xs text-muted-foreground">{card.description}</p>
+            <div className="flex flex-wrap gap-4">
+              {networkBreakdown.map((network) => (
+                <div key={network.network} className="flex items-center gap-2">
+                  <Badge variant="secondary" className={network.badgeClass}>
+                    {network.label}
+                  </Badge>
+                  <span className="text-sm font-medium">
+                    €{network.netRevenue.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({network.impressions.toLocaleString()} imp)
+                  </span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
-      ))}
+      )}
     </div>
   );
 }
