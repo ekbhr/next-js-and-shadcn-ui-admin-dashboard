@@ -73,27 +73,35 @@ class YandexClient {
 
   /**
    * Make authenticated request to Yandex API
+   * 
+   * Yandex Partner API supports OAuth token via:
+   * 1. Authorization header: "OAuth <token>"
+   * 2. Query parameter: oauth_token=<token>
+   * 
+   * We try both methods for compatibility.
    */
   private async makeApiRequest(
     params: Record<string, string | number | string[]>
   ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     try {
-      console.log("[Yandex API] Making request...");
+      console.log("[Yandex API] Making request to:", this.apiUrl);
       console.log("[Yandex API] Params:", JSON.stringify(params, null, 2));
 
       const response = await axios.get(this.apiUrl, {
         params: {
           ...params,
-          oauth_token: this.apiToken,
+          oauth_token: this.apiToken, // Query param method
           lang: "en",
         },
         headers: {
           Accept: "application/json",
+          Authorization: `OAuth ${this.apiToken}`, // Header method
         },
-        timeout: 60000, // 60 second timeout
+        timeout: 60000,
       });
 
       console.log("[Yandex API] Response status:", response.status);
+      console.log("[Yandex API] Response data preview:", JSON.stringify(response.data).substring(0, 500));
 
       if (response.data?.error) {
         console.error("[Yandex API] Error in response:", response.data.error);
@@ -112,11 +120,11 @@ class YandexClient {
         console.error("[Yandex API] Request error:", error.message);
         if (error.response) {
           console.error("[Yandex API] Response status:", error.response.status);
-          console.error("[Yandex API] Response data:", error.response.data);
+          console.error("[Yandex API] Response data:", JSON.stringify(error.response.data));
         }
         return {
           success: false,
-          error: error.response?.data?.error?.message || error.message,
+          error: error.response?.data?.error?.message || error.response?.data?.message || error.message,
         };
       }
       console.error("[Yandex API] Unknown error:", error);
