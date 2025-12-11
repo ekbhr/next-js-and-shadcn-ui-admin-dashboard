@@ -51,10 +51,10 @@ export function ApiConnectionsSection({ apiStatus }: ApiConnectionsSectionProps)
     setTestResult(null);
 
     try {
-      // Use the sync endpoint with a test flag (just checks API connectivity)
+      // Use dedicated test endpoints
       const endpoint = network === "sedo" 
         ? "/api/reports/sedo/test" 
-        : "/api/reports/yandex/sync";
+        : "/api/reports/yandex/test";
       
       const response = await fetch(endpoint, {
         method: "POST",

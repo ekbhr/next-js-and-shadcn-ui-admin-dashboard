@@ -2,13 +2,13 @@
  * Sedo API Test Endpoint
  *
  * Use this endpoint to test Sedo API connectivity
- * GET /api/reports/sedo/test
+ * GET/POST /api/reports/sedo/test
  */
 
 import { NextResponse } from "next/server";
 import { sedoClient } from "@/lib/sedo";
 
-export async function GET() {
+async function testSedoApi() {
   try {
     // Get configuration status
     const configStatus = sedoClient.getConfigStatus();
@@ -68,5 +68,14 @@ export async function GET() {
       { status: 500 },
     );
   }
+}
+
+// Support both GET and POST requests
+export async function GET() {
+  return testSedoApi();
+}
+
+export async function POST() {
+  return testSedoApi();
 }
 
