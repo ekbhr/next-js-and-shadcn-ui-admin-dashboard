@@ -61,6 +61,9 @@ model User {
   yandexRevenue     Bidder_Yandex[]
   domainAssignments Domain_Assignment[]
   overviewReports   Overview_Report[]
+  
+  // Payment details (one-to-one)
+  paymentDetails    PaymentDetails?
 }
 
 model PasswordResetToken {
@@ -239,4 +242,38 @@ model Bidder_Yandex {
   @@index([userId])
   @@index([domain])
   @@index([tagId])
+}
+
+// ============================================
+// USER PAYMENT DETAILS
+// ============================================
+
+// Payment details for revenue payouts
+model PaymentDetails {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Preferred payment method
+  preferredMethod String   @default("paypal") // "paypal", "bank", "wise"
+  
+  // PayPal
+  paypalEmail     String?
+  
+  // Bank Transfer
+  bankAccountName String?  // Account holder name
+  bankName        String?  // Bank name
+  iban            String?  // International Bank Account Number
+  swiftBic        String?  // SWIFT/BIC code
+  bankAddress     String?  // Bank address (optional)
+  bankCurrency    String?  @default("USD") // Preferred currency
+  
+  // Wise (TransferWise)
+  wiseEmail       String?
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
 }

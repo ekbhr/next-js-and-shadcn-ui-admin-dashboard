@@ -27,7 +27,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, User, Shield, Globe, LogIn } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Loader2, User, Shield, Globe, LogIn, CreditCard, Wallet, Building2, CheckCircle, XCircle } from "lucide-react";
+
+interface PaymentDetails {
+  preferredMethod: string;
+  paypalEmail: string | null;
+  bankAccountName: string | null;
+  bankName: string | null;
+  iban: string | null;
+  swiftBic: string | null;
+  bankCurrency: string | null;
+  wiseEmail: string | null;
+}
 
 interface UserData {
   id: string;
@@ -37,6 +56,7 @@ interface UserData {
   isActive: boolean;
   createdAt: Date;
   domainCount: number;
+  paymentDetails: PaymentDetails | null;
 }
 
 interface UserManagementProps {
@@ -132,6 +152,7 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Domains</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="text-center">Active</TableHead>
               <TableHead className="text-center">Actions</TableHead>
@@ -197,6 +218,9 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <PaymentInfoDialog user={user} />
+                  </TableCell>
+                  <TableCell>
                     {new Date(user.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-center">
@@ -245,5 +269,150 @@ export function UserManagement({ users, currentUserId }: UserManagementProps) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Payment Info Dialog Component
+function PaymentInfoDialog({ user }: { user: UserData }) {
+  const payment = user.paymentDetails;
+  
+  const getMethodIcon = (method: string) => {
+    switch (method) {
+      case "paypal": return <Wallet className="h-4 w-4" />;
+      case "bank": return <Building2 className="h-4 w-4" />;
+      case "wise": return <CreditCard className="h-4 w-4" />;
+      default: return <CreditCard className="h-4 w-4" />;
+    }
+  };
+
+  const getMethodLabel = (method: string) => {
+    switch (method) {
+      case "paypal": return "PayPal";
+      case "bank": return "Bank Transfer";
+      case "wise": return "Wise";
+      default: return method;
+    }
+  };
+
+  if (!payment) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <XCircle className="h-3 w-3 mr-1" />
+        Not set
+      </Badge>
+    );
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-auto p-1">
+          <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+            {getMethodIcon(payment.preferredMethod)}
+            <span className="ml-1">{getMethodLabel(payment.preferredMethod)}</span>
+          </Badge>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Payment Details
+          </DialogTitle>
+          <DialogDescription>
+            Payment information for {user.name || user.email}
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          {/* Preferred Method */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground w-32">Preferred:</span>
+            <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              {getMethodLabel(payment.preferredMethod)}
+            </Badge>
+          </div>
+
+          {/* PayPal */}
+          {payment.paypalEmail && (
+            <div className="space-y-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
+              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium">
+                <Wallet className="h-4 w-4" />
+                PayPal
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Email:</span>{" "}
+                <span className="font-mono">{payment.paypalEmail}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Bank Transfer */}
+          {(payment.iban || payment.bankName) && (
+            <div className="space-y-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
+                <Building2 className="h-4 w-4" />
+                Bank Transfer
+              </div>
+              <div className="text-sm space-y-1">
+                {payment.bankAccountName && (
+                  <div>
+                    <span className="text-muted-foreground">Account Name:</span>{" "}
+                    {payment.bankAccountName}
+                  </div>
+                )}
+                {payment.bankName && (
+                  <div>
+                    <span className="text-muted-foreground">Bank:</span>{" "}
+                    {payment.bankName}
+                  </div>
+                )}
+                {payment.iban && (
+                  <div>
+                    <span className="text-muted-foreground">IBAN:</span>{" "}
+                    <span className="font-mono text-xs">{payment.iban}</span>
+                  </div>
+                )}
+                {payment.swiftBic && (
+                  <div>
+                    <span className="text-muted-foreground">SWIFT/BIC:</span>{" "}
+                    <span className="font-mono">{payment.swiftBic}</span>
+                  </div>
+                )}
+                {payment.bankCurrency && (
+                  <div>
+                    <span className="text-muted-foreground">Currency:</span>{" "}
+                    {payment.bankCurrency}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Wise */}
+          {payment.wiseEmail && (
+            <div className="space-y-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-medium">
+                <CreditCard className="h-4 w-4" />
+                Wise
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Email:</span>{" "}
+                <span className="font-mono">{payment.wiseEmail}</span>
+              </div>
+            </div>
+          )}
+
+          {/* No details filled */}
+          {!payment.paypalEmail && !payment.iban && !payment.bankName && !payment.wiseEmail && (
+            <div className="text-center py-4 text-muted-foreground">
+              <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No payment details provided yet.</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

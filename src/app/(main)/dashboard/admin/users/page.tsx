@@ -27,7 +27,7 @@ export default async function UsersPage() {
     redirect("/dashboard/unauthorized");
   }
 
-  // Get all users with domain count
+  // Get all users with domain count and payment details
   const users = await prisma.user.findMany({
     select: {
       id: true,
@@ -39,6 +39,18 @@ export default async function UsersPage() {
       _count: {
         select: {
           domainAssignments: true,
+        },
+      },
+      paymentDetails: {
+        select: {
+          preferredMethod: true,
+          paypalEmail: true,
+          bankAccountName: true,
+          bankName: true,
+          iban: true,
+          swiftBic: true,
+          bankCurrency: true,
+          wiseEmail: true,
         },
       },
     },
@@ -53,6 +65,7 @@ export default async function UsersPage() {
     isActive: user.isActive,
     createdAt: user.createdAt,
     domainCount: user._count.domainAssignments,
+    paymentDetails: user.paymentDetails,
   }));
 
   return (

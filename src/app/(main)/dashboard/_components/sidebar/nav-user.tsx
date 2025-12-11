@@ -1,6 +1,6 @@
 "use client";
 
-import { EllipsisVertical, CircleUser, CreditCard, MessageSquareDot, LogOut } from "lucide-react";
+import { EllipsisVertical, CircleUser, CreditCard, LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -92,23 +92,23 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
-            {/* TODO: Uncomment when these features are implemented
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => router.push("/dashboard/account")}
+                className="cursor-pointer"
+              >
                 <CircleUser />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => router.push("/dashboard/account")}
+                className="cursor-pointer"
+              >
                 <CreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <MessageSquareDot />
-                Notifications
+                Payment Details
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            */}
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onSelect={(e) => {
