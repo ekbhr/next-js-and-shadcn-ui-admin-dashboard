@@ -4,6 +4,7 @@
  * Domain Assignment Table
  * 
  * Displays all domain assignments with user assignment and revShare editing.
+ * Supports bulk operations: assign multiple domains to one user at once.
  * One domain = One user
  */
 
@@ -16,10 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -27,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Check, X, Loader2, User } from "lucide-react";
+import { Pencil, Check, X, Loader2, User, Users, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface DomainAssignment {
@@ -61,6 +63,12 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
   const [editRevShare, setEditRevShare] = useState<string>("");
   const [editUserId, setEditUserId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUserId, setBulkUserId] = useState<string>("");
+  const [bulkRevShare, setBulkRevShare] = useState<string>("80");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const handleEdit = (assignment: DomainAssignment) => {
     setEditingId(assignment.id);
@@ -72,6 +80,75 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
     setEditingId(null);
     setEditRevShare("");
     setEditUserId("");
+  };
+
+  // Toggle single selection
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  // Toggle all selection
+  const toggleSelectAll = () => {
+    if (selectedIds.size === assignments.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(assignments.map(a => a.id)));
+    }
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkUserId("");
+    setBulkRevShare("80");
+  };
+
+  // Bulk assign
+  const handleBulkAssign = async () => {
+    if (!bulkUserId) {
+      alert("Please select a user to assign domains to");
+      return;
+    }
+
+    const revShare = parseFloat(bulkRevShare);
+    if (isNaN(revShare) || revShare < 0 || revShare > 100) {
+      alert("RevShare must be between 0 and 100");
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      const response = await fetch("/api/domains/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          userId: bulkUserId,
+          revShare: revShare,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update");
+      }
+
+      clearSelection();
+      router.refresh();
+      alert(`Successfully updated ${data.updated} domains`);
+    } catch (error) {
+      console.error("Error bulk updating:", error);
+      alert(error instanceof Error ? error.message : "Failed to update");
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   const handleSave = async (assignment: DomainAssignment) => {
@@ -146,15 +223,100 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
     );
   }
 
+  const isAllSelected = assignments.length > 0 && selectedIds.size === assignments.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < assignments.length;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Domains ({assignments.length})</CardTitle>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Domains ({assignments.length})</CardTitle>
+            {selectedIds.size > 0 && (
+              <CardDescription className="mt-1">
+                {selectedIds.size} domain{selectedIds.size > 1 ? 's' : ''} selected
+              </CardDescription>
+            )}
+          </div>
+        </div>
       </CardHeader>
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="mx-6 mb-4 p-4 bg-muted rounded-lg border">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-primary" />
+              <span className="font-medium">{selectedIds.size} selected</span>
+            </div>
+            
+            <div className="flex-1" />
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <Select value={bulkUserId} onValueChange={setBulkUserId}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Assign to user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <span className="flex items-center gap-2">
+                        <User className="h-3 w-3" />
+                        {user.name || user.email}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={bulkRevShare}
+                  onChange={(e) => setBulkRevShare(e.target.value)}
+                  className="w-20 text-center"
+                  placeholder="80"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+              
+              <Button 
+                onClick={handleBulkAssign} 
+                disabled={bulkSaving || !bulkUserId}
+                className="gap-2"
+              >
+                {bulkSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Users className="h-4 w-4" />
+                )}
+                Assign Selected
+              </Button>
+              
+              <Button variant="outline" onClick={clearSelection}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={isAllSelected}
+                  ref={(el) => {
+                    if (el) (el as HTMLButtonElement & { indeterminate: boolean }).indeterminate = isSomeSelected;
+                  }}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead>Domain</TableHead>
               <TableHead>Network</TableHead>
               <TableHead>Assigned To</TableHead>
@@ -165,7 +327,17 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
           </TableHeader>
           <TableBody>
             {assignments.map((assignment) => (
-              <TableRow key={assignment.id}>
+              <TableRow 
+                key={assignment.id}
+                className={selectedIds.has(assignment.id) ? "bg-muted/50" : ""}
+              >
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.has(assignment.id)}
+                    onCheckedChange={() => toggleSelection(assignment.id)}
+                    aria-label={`Select ${assignment.domain}`}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">
                   {assignment.domain}
                 </TableCell>
