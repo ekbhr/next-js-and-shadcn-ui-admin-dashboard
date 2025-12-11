@@ -94,7 +94,6 @@ export const sidebarItems: NavGroup[] = [
         title: "Yandex",
         url: "/dashboard/admin/reports/yandex",
         icon: Network,
-        comingSoon: true,
         adminOnly: true,
       },
       {

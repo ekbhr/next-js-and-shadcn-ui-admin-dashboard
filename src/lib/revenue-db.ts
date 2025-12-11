@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { SedoRevenueData } from "@/lib/sedo";
+import type { YandexRevenueData } from "@/lib/yandex";
 
 // Default revShare if no assignment found
 const DEFAULT_REV_SHARE = 80;
@@ -728,5 +729,305 @@ export async function getDashboardSummary(
     dailyData,
     topDomains,
   };
+}
+
+// ============================================
+// YANDEX REVENUE FUNCTIONS
+// ============================================
+
+/**
+ * Save Yandex revenue data to database (upsert)
+ * 
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN, not the logged-in user.
+ */
+export async function saveYandexRevenue(
+  data: YandexRevenueData[],
+  fallbackUserId: string,
+  options: { saveToDomainOwner?: boolean; filterByAssignedDomains?: boolean } = {}
+): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
+  let saved = 0;
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  const saveToDomainOwner = options.saveToDomainOwner !== false;
+  const domainOwners = saveToDomainOwner ? await getAllDomainOwners("yandex") : new Map();
+
+  for (const item of data) {
+    try {
+      const domainValue = item.domain || null;
+      const normalizedDomain = domainValue?.toLowerCase().trim();
+
+      // Determine target user
+      let targetUserId = fallbackUserId;
+      
+      if (saveToDomainOwner && normalizedDomain) {
+        const ownerId = domainOwners.get(normalizedDomain);
+        if (ownerId) {
+          targetUserId = ownerId;
+        } else if (options.filterByAssignedDomains) {
+          skipped++;
+          continue;
+        }
+      } else if (options.filterByAssignedDomains && !normalizedDomain) {
+        skipped++;
+        continue;
+      }
+
+      // Get revShare
+      const revShare = await getRevShare(targetUserId, domainValue, "yandex");
+      const netRevenue = calculateNetRevenue(item.revenue, revShare);
+
+      // Parse date
+      const date = new Date(item.date);
+      date.setUTCHours(0, 0, 0, 0);
+
+      const recordData = {
+        grossRevenue: item.revenue,
+        netRevenue,
+        revShare,
+        impressions: item.impressions || 0,
+        clicks: item.clicks || 0,
+        ctr: item.ctr || null,
+        rpm: item.rpm || null,
+        tagName: item.tagName || null,
+        status: "Estimated",
+      };
+
+      // Find existing record
+      const existing = await prisma.bidder_Yandex.findFirst({
+        where: {
+          date,
+          domain: domainValue,
+          tagId: item.tagId || null,
+          userId: targetUserId,
+        },
+      });
+
+      if (existing) {
+        await prisma.bidder_Yandex.update({
+          where: { id: existing.id },
+          data: recordData,
+        });
+        updated++;
+      } else {
+        // Check if exists for different user
+        const existingOtherUser = await prisma.bidder_Yandex.findFirst({
+          where: {
+            date,
+            domain: domainValue,
+            tagId: item.tagId || null,
+          },
+        });
+
+        if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
+          await prisma.bidder_Yandex.update({
+            where: { id: existingOtherUser.id },
+            data: { userId: targetUserId, ...recordData },
+          });
+          updated++;
+        } else if (!existingOtherUser) {
+          await prisma.bidder_Yandex.create({
+            data: {
+              date,
+              domain: domainValue,
+              tagId: item.tagId || null,
+              currency: "USD",
+              userId: targetUserId,
+              ...recordData,
+            },
+          });
+          saved++;
+        } else {
+          updated++;
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Failed to save ${item.date} ${item.domain}: ${errorMsg}`);
+      console.error(`[Revenue DB] Yandex error:`, error);
+    }
+  }
+
+  console.log(`[Revenue DB] Yandex data: ${saved} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
+  return { saved, updated, skipped, errors };
+}
+
+/**
+ * Get Yandex revenue data from database
+ */
+export async function getYandexRevenue(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+    domain?: string;
+    tagId?: string;
+    limit?: number;
+  } = {}
+) {
+  const { startDate, endDate, domain, tagId, limit } = options;
+
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  if (domain) where.domain = domain;
+  if (tagId) where.tagId = tagId;
+
+  const data = await prisma.bidder_Yandex.findMany({
+    where,
+    orderBy: { date: "asc" },
+    take: limit,
+  });
+
+  return data;
+}
+
+/**
+ * Get aggregated Yandex revenue summary
+ */
+export async function getYandexRevenueSummary(
+  userId: string,
+  options: { startDate?: Date; endDate?: Date } = {}
+) {
+  const { startDate, endDate } = options;
+
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  const result = await prisma.bidder_Yandex.aggregate({
+    where,
+    _sum: {
+      grossRevenue: true,
+      netRevenue: true,
+      impressions: true,
+      clicks: true,
+    },
+    _count: true,
+  });
+
+  return {
+    totalGrossRevenue: result._sum.grossRevenue || 0,
+    totalNetRevenue: result._sum.netRevenue || 0,
+    totalImpressions: result._sum.impressions || 0,
+    totalClicks: result._sum.clicks || 0,
+    recordCount: result._count,
+  };
+}
+
+/**
+ * Sync Yandex data to Overview Report
+ */
+export async function syncYandexToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
+  let synced = 0;
+  const errors: string[] = [];
+
+  try {
+    const yandexData = await prisma.bidder_Yandex.findMany({
+      where: userId ? { userId } : undefined,
+    });
+
+    // Group by userId + date + domain
+    const grouped = new Map<string, {
+      userId: string;
+      date: Date;
+      domain: string | null;
+      grossRevenue: number;
+      netRevenue: number;
+      impressions: number;
+      clicks: number;
+    }>();
+
+    for (const record of yandexData) {
+      const key = `${record.userId}_${record.date.toISOString().split('T')[0]}_${record.domain || 'all'}`;
+      
+      if (grouped.has(key)) {
+        const existing = grouped.get(key)!;
+        existing.grossRevenue += record.grossRevenue;
+        existing.netRevenue += record.netRevenue;
+        existing.impressions += record.impressions;
+        existing.clicks += record.clicks;
+      } else {
+        grouped.set(key, {
+          userId: record.userId,
+          date: record.date,
+          domain: record.domain,
+          grossRevenue: record.grossRevenue,
+          netRevenue: record.netRevenue,
+          impressions: record.impressions,
+          clicks: record.clicks,
+        });
+      }
+    }
+
+    // Save to Overview_Report
+    for (const [, data] of grouped) {
+      try {
+        const ctr = data.impressions > 0 
+          ? Math.round((data.clicks / data.impressions) * 10000) / 100 
+          : null;
+        const rpm = data.impressions > 0 
+          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100 
+          : null;
+
+        const recordData = {
+          grossRevenue: data.grossRevenue,
+          netRevenue: data.netRevenue,
+          impressions: data.impressions,
+          clicks: data.clicks,
+          ctr,
+          rpm,
+        };
+
+        const existing = await prisma.overview_Report.findFirst({
+          where: {
+            date: data.date,
+            network: "yandex",
+            domain: data.domain,
+            userId: data.userId,
+          },
+        });
+
+        if (existing) {
+          await prisma.overview_Report.update({
+            where: { id: existing.id },
+            data: recordData,
+          });
+        } else {
+          await prisma.overview_Report.create({
+            data: {
+              date: data.date,
+              network: "yandex",
+              domain: data.domain,
+              currency: "USD",
+              userId: data.userId,
+              ...recordData,
+            },
+          });
+        }
+        synced++;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
+      }
+    }
+
+    console.log(`[Yandex Overview Sync] ${userId ? `User ${userId}` : 'All users'}: ${synced} records, ${errors.length} errors`);
+  } catch (error) {
+    console.error("[Yandex Overview Sync] Error:", error);
+    errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return { synced, errors };
 }
 

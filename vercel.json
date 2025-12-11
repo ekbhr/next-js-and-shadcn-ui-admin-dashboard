@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/sync-sedo",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/sync-yandex",
+      "schedule": "0 6 * * *"
     }
   ]
 }

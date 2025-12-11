@@ -58,6 +58,7 @@ model User {
   
   // Revenue & Reporting relations
   sedoRevenue       Bidder_Sedo[]
+  yandexRevenue     Bidder_Yandex[]
   domainAssignments Domain_Assignment[]
   overviewReports   Overview_Report[]
 }
@@ -194,4 +195,48 @@ model Overview_Report {
   @@index([date])
   @@index([network])
   @@index([userId])
+}
+
+// Yandex (YAN) specific revenue data
+model Bidder_Yandex {
+  id            String   @id @default(cuid())
+  
+  // Core fields
+  date          DateTime // Reporting date
+  domain        String?  // Domain name
+  
+  // Yandex-specific fields
+  tagId         String?  // AdUnit ID
+  tagName       String?  // AdUnit name
+  pageId        String?  // Page ID (if available)
+  
+  // Revenue
+  grossRevenue  Float    // Total earnings from Yandex
+  netRevenue    Float    // After revshare deduction
+  revShare      Float    @default(80) // Partner's percentage
+  currency      String   @default("USD")
+  
+  // Metrics
+  impressions   Int      // Shows/views
+  clicks        Int
+  ctr           Float?   // Click-through rate
+  rpm           Float?   // Revenue per mille
+  
+  // Metadata
+  status        String?  // Status if available
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Multi-user support
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Unique constraint for upsert (prevents duplicates)
+  @@unique([date, domain, tagId, userId])
+  @@index([date])
+  @@index([userId])
+  @@index([domain])
+  @@index([tagId])
 }
