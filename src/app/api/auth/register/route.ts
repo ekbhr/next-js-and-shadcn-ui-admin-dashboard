@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { authLimiter, getClientIp, isValidEmail, sanitizeString } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - prevent brute force registration
+    const ip = getClientIp(request);
+    const { success: rateLimitOk } = await authLimiter.check(5, `register:${ip}`);
+    if (!rateLimitOk) {
+      return NextResponse.json(
+        { error: "Too many registration attempts. Please try again later." },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json();
     const { email, password, name } = body;
 
@@ -15,16 +26,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+    // Validate email format
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!isValidEmail(normalizedEmail)) {
       return NextResponse.json(
-        { error: "Password must be at least 6 characters" },
+        { error: "Invalid email format" },
+        { status: 400 },
+      );
+    }
+
+    // Password validation - minimum 8 characters
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters" },
         { status: 400 },
       );
     }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -37,12 +58,12 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Create user with sanitized input
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         password: hashedPassword,
-        name: name || null,
+        name: name ? sanitizeString(name).slice(0, 100) : null,
       },
       select: {
         id: true,

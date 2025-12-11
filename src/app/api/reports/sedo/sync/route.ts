@@ -23,6 +23,7 @@ import { saveSedoRevenue, getSedoRevenueSummary, syncToOverviewReport } from "@/
 import { isAdmin } from "@/lib/roles";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isSedoCredentials } from "@/lib/encryption";
+import { syncLimiter, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
@@ -38,6 +39,16 @@ export async function POST(request: Request) {
 
     const userId = session.user.id;
     const userIsAdmin = isAdmin((session.user as { role?: string }).role);
+
+    // Rate limiting - sync is expensive
+    const ip = getClientIp(request);
+    const { success: rateLimitOk } = await syncLimiter.check(5, `sedo-sync:${ip}`);
+    if (!rateLimitOk) {
+      return NextResponse.json(
+        { success: false, error: "Too many sync requests. Please wait a few minutes." },
+        { status: 429 }
+      );
+    }
 
     // Parse request body for optional parameters
     let domain: string | undefined;

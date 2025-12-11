@@ -3,9 +3,21 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { getPasswordResetEmailTemplate } from "@/lib/email-templates";
+import { authLimiter, getClientIp, isValidEmail } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - prevent abuse
+    const ip = getClientIp(request);
+    const { success: rateLimitOk } = await authLimiter.check(3, `forgot-password:${ip}`);
+    if (!rateLimitOk) {
+      // Still return success to prevent enumeration
+      return NextResponse.json(
+        { message: "If that email exists, we've sent a reset link." },
+        { status: 200 },
+      );
+    }
+
     const body = await request.json();
     const { email } = body;
 
@@ -13,6 +25,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Email is required" },
         { status: 400 },
+      );
+    }
+
+    // Validate email format
+    if (!isValidEmail(email)) {
+      // Still return success to prevent enumeration
+      return NextResponse.json(
+        { message: "If that email exists, we've sent a reset link." },
+        { status: 200 },
       );
     }
 

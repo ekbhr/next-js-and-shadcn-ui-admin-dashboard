@@ -11,13 +11,15 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/roles";
+import { syncLimiter, getClientIp } from "@/lib/rate-limit";
 import {
   syncAllNetworkDomains,
   getAllDomainAssignments,
   getNetworkStatus,
 } from "@/lib/domains";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     // Check authentication
     const session = await auth();
@@ -25,6 +27,24 @@ export async function POST() {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    // Admin only - domain sync affects all users
+    if (!isAdmin((session.user as { role?: string }).role)) {
+      return NextResponse.json(
+        { success: false, error: "Admin access required" },
+        { status: 403 }
+      );
+    }
+
+    // Rate limiting - sync is expensive operation
+    const ip = getClientIp(request);
+    const { success: rateLimitOk } = await syncLimiter.check(5, `domain-sync:${ip}`);
+    if (!rateLimitOk) {
+      return NextResponse.json(
+        { success: false, error: "Too many sync requests. Please wait a few minutes." },
+        { status: 429 }
       );
     }
 

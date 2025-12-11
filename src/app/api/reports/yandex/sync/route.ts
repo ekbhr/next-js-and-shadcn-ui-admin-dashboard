@@ -20,8 +20,9 @@ import { saveYandexRevenue, getYandexRevenueSummary, syncYandexToOverviewReport 
 import { isAdmin } from "@/lib/roles";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isYandexCredentials } from "@/lib/encryption";
+import { syncLimiter, getClientIp } from "@/lib/rate-limit";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const session = await auth();
     
@@ -34,6 +35,16 @@ export async function POST() {
 
     const userId = session.user.id;
     const userIsAdmin = isAdmin((session.user as { role?: string }).role);
+
+    // Rate limiting - sync is expensive
+    const ip = getClientIp(request);
+    const { success: rateLimitOk } = await syncLimiter.check(5, `yandex-sync:${ip}`);
+    if (!rateLimitOk) {
+      return NextResponse.json(
+        { success: false, error: "Too many sync requests. Please wait a few minutes." },
+        { status: 429 }
+      );
+    }
 
     // Get accounts to sync
     // Priority: 1) Database accounts, 2) Environment variables
