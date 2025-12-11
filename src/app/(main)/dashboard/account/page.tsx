@@ -5,6 +5,7 @@
  * - Profile (name, avatar)
  * - Password change (for credentials users)
  * - Payment details (PayPal, Bank, Wise)
+ * - API Keys (for programmatic access)
  */
 
 import { redirect } from "next/navigation";
@@ -13,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { ProfileSection } from "./_components/profile-section";
 import { PasswordSection } from "./_components/password-section";
 import { PaymentSection } from "./_components/payment-section";
+import { ApiKeysSection } from "./_components/api-keys-section";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -74,6 +76,9 @@ export default async function AccountPage() {
           paymentDetails={user.paymentDetails}
           userId={user.id}
         />
+
+        {/* API Keys Section */}
+        <ApiKeysSection />
       </div>
     </div>
   );

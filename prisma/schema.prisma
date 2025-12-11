@@ -64,6 +64,49 @@ model User {
   
   // Payment details (one-to-one)
   paymentDetails    PaymentDetails?
+  
+  // API keys for programmatic access
+  apiKeys           ApiKey[]
+}
+
+// ============================================
+// API KEYS (Publisher API Access)
+// ============================================
+
+// API keys for publishers to access their data programmatically
+model ApiKey {
+  id            String   @id @default(cuid())
+  
+  // Key identification
+  name          String   // User-friendly name: "Production", "Testing"
+  key           String   @unique // The actual API key (hashed)
+  keyPrefix     String   // First 8 chars of unhashed key for display: "rem_abc1..."
+  
+  // Permissions & Scope
+  scopes        String[] @default(["reports:read"]) // Available: reports:read, reports:export
+  
+  // Rate limiting
+  rateLimit     Int      @default(100) // Requests per hour
+  
+  // Usage tracking
+  lastUsedAt    DateTime?
+  requestCount  Int      @default(0) // Total requests made
+  
+  // Status
+  isActive      Boolean  @default(true)
+  expiresAt     DateTime? // Optional expiration
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Owner
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([key])
+  @@index([userId])
+  @@index([isActive])
 }
 
 model PasswordResetToken {

@@ -6,6 +6,7 @@ import {
   Users,
   BarChart3,
   Network,
+  Code,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,6 +52,12 @@ export const sidebarItems: NavGroup[] = [
         title: "Overview",
         url: "/dashboard/overview",
         icon: PieChart,
+      },
+      {
+        title: "API",
+        url: "/dashboard/api-docs",
+        icon: Code,
+        isNew: true,
       },
     ],
   },
