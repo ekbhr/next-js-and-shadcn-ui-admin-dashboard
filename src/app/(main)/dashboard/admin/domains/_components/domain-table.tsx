@@ -139,7 +139,7 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-center py-8">
-            No domains found. Click &quot;Sync Domains&quot; to fetch domains from Sedo.
+            No domains found. Click &quot;Sync Domains&quot; to fetch domains from all networks.
           </p>
         </CardContent>
       </Card>

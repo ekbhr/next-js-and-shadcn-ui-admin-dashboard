@@ -3,13 +3,14 @@
  * 
  * POST /api/domains/sync
  * 
- * Fetches domains from Sedo and syncs them to Domain_Assignment table.
+ * Fetches domains from ALL configured networks (Sedo, Yandex) and syncs them to Domain_Assignment table.
  * Creates new assignments with default revShare for new domains.
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { sedoClient } from "@/lib/sedo";
+import { yandexClient } from "@/lib/yandex";
 import { syncDomainsToAssignment, getDomainAssignments } from "@/lib/revenue-db";
 
 export async function POST() {
@@ -26,39 +27,78 @@ export async function POST() {
     const userId = session.user.id;
     console.log(`[Domain Sync] Starting for user: ${session.user.email}`);
 
-    // Fetch domains from Sedo
-    const sedoDomains = await sedoClient.getDomains();
+    const results = {
+      sedo: { fetched: 0, created: 0, existing: 0, errors: 0 },
+      yandex: { fetched: 0, created: 0, existing: 0, errors: 0 },
+    };
 
-    if (!sedoDomains.success) {
-      return NextResponse.json({
-        success: false,
-        error: sedoDomains.error || "Failed to fetch domains from Sedo",
-      });
+    // Fetch and sync Sedo domains
+    if (sedoClient.isConfigured()) {
+      console.log(`[Domain Sync] Fetching Sedo domains...`);
+      const sedoDomains = await sedoClient.getDomains();
+
+      if (sedoDomains.success && sedoDomains.domains.length > 0) {
+        console.log(`[Domain Sync] Fetched ${sedoDomains.domains.length} domains from Sedo`);
+        const sedoResult = await syncDomainsToAssignment(
+          userId,
+          sedoDomains.domains,
+          "sedo",
+          80
+        );
+        results.sedo = {
+          fetched: sedoDomains.domains.length,
+          created: sedoResult.created,
+          existing: sedoResult.existing,
+          errors: sedoResult.errors.length,
+        };
+      }
+    } else {
+      console.log(`[Domain Sync] Sedo not configured, skipping`);
     }
 
-    console.log(`[Domain Sync] Fetched ${sedoDomains.domains.length} domains from Sedo`);
+    // Fetch and sync Yandex domains
+    if (yandexClient.isConfigured()) {
+      console.log(`[Domain Sync] Fetching Yandex domains...`);
+      const yandexDomains = await yandexClient.getDomains();
 
-    // Sync to Domain_Assignment table
-    const result = await syncDomainsToAssignment(
-      userId,
-      sedoDomains.domains,
-      "sedo",
-      80 // Default revShare
-    );
+      if (yandexDomains.success && yandexDomains.domains.length > 0) {
+        console.log(`[Domain Sync] Fetched ${yandexDomains.domains.length} domains from Yandex`);
+        const yandexResult = await syncDomainsToAssignment(
+          userId,
+          yandexDomains.domains,
+          "yandex",
+          80
+        );
+        results.yandex = {
+          fetched: yandexDomains.domains.length,
+          created: yandexResult.created,
+          existing: yandexResult.existing,
+          errors: yandexResult.errors.length,
+        };
+      }
+    } else {
+      console.log(`[Domain Sync] Yandex not configured, skipping`);
+    }
 
     // Get updated assignments
     const assignments = await getDomainAssignments(userId);
+
+    // Calculate totals
+    const totalFetched = results.sedo.fetched + results.yandex.fetched;
+    const totalCreated = results.sedo.created + results.yandex.created;
+    const totalExisting = results.sedo.existing + results.yandex.existing;
+    const totalErrors = results.sedo.errors + results.yandex.errors;
 
     return NextResponse.json({
       success: true,
       message: "Domains synced successfully",
       sync: {
-        fetched: sedoDomains.domains.length,
-        created: result.created,
-        existing: result.existing,
-        errors: result.errors.length,
+        fetched: totalFetched,
+        created: totalCreated,
+        existing: totalExisting,
+        errors: totalErrors,
       },
-      domains: sedoDomains.domains,
+      networks: results,
       assignments: assignments.map((a) => ({
         id: a.id,
         domain: a.domain,
@@ -66,7 +106,6 @@ export async function POST() {
         revShare: a.revShare,
         isActive: a.isActive,
       })),
-      errorDetails: result.errors.length > 0 ? result.errors : undefined,
     });
   } catch (error) {
     console.error("[Domain Sync] Error:", error);

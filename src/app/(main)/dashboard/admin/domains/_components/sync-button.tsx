@@ -3,7 +3,7 @@
 /**
  * Sync Domains Button
  * 
- * Triggers domain sync from Sedo API.
+ * Triggers domain sync from all configured networks (Sedo, Yandex).
  */
 
 import { useState } from "react";
