@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 
 import { Toaster } from "@/components/ui/sonner";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { NProgressHandler } from "@/components/providers/nprogress-handler";
 import { APP_CONFIG } from "@/config/app-config";
 import { getPreference } from "@/server/server-actions";
 import { PreferencesStoreProvider } from "@/stores/preferences/preferences-provider";
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body className={`${inter.className} min-h-screen antialiased`} suppressHydrationWarning>
         <AuthSessionProvider>
           <PreferencesStoreProvider themeMode={themeMode} themePreset={themePreset}>
+            <NProgressHandler />
             {children}
             <Toaster />
           </PreferencesStoreProvider>
