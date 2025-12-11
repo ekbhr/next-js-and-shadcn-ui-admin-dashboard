@@ -12,7 +12,6 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { YandexReportTable } from "./_components/yandex-report-table";
 import { YandexReportSummary } from "./_components/yandex-report-summary";
-import { SyncYandexButton } from "./_components/sync-yandex-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Yandex Report",
@@ -208,14 +207,11 @@ export default async function AdminYandexReportPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Yandex Report</h1>
-          <p className="text-muted-foreground">
-            Detailed Yandex Advertising Network revenue (last 31 days)
-          </p>
-        </div>
-        <SyncYandexButton />
+      <div>
+        <h1 className="text-2xl font-bold">Yandex Report</h1>
+        <p className="text-muted-foreground">
+          Detailed Yandex Advertising Network revenue (last 31 days)
+        </p>
       </div>
 
       {/* Summary Cards */}

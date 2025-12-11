@@ -12,7 +12,6 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { SedoReportTable } from "./_components/sedo-report-table";
 import { SedoReportSummary } from "./_components/sedo-report-summary";
-import { SyncSedoButton } from "./_components/sync-sedo-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Sedo Report",
@@ -166,14 +165,11 @@ export default async function AdminSedoReportPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Sedo Report</h1>
-          <p className="text-muted-foreground">
-            Detailed Sedo parking revenue (last 31 days)
-          </p>
-        </div>
-        <SyncSedoButton />
+      <div>
+        <h1 className="text-2xl font-bold">Sedo Report</h1>
+        <p className="text-muted-foreground">
+          Detailed Sedo parking revenue (last 31 days)
+        </p>
       </div>
 
       {/* Summary Cards */}
