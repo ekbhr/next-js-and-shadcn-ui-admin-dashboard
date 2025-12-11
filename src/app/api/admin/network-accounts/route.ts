@@ -121,16 +121,26 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error creating network account:", error);
     
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
     // Handle unique constraint violation
-    if (error instanceof Error && error.message.includes("Unique constraint")) {
+    if (errorMessage.includes("Unique constraint")) {
       return NextResponse.json(
         { error: "An account with this name already exists for this network" },
         { status: 409 }
       );
     }
     
+    // Handle encryption key missing
+    if (errorMessage.includes("ENCRYPTION_KEY")) {
+      return NextResponse.json(
+        { error: "ENCRYPTION_KEY environment variable is not set. Please add it to your Vercel environment variables." },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: "Failed to create account" },
+      { error: `Failed to create account: ${errorMessage}` },
       { status: 500 }
     );
   }
