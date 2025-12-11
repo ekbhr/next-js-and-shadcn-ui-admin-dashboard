@@ -46,7 +46,8 @@ class YandexClient {
 
   constructor() {
     this.apiToken = process.env.YANDEX_API;
-    this.apiUrl = "https://partner2.yandex.ru/api/statistics2/get.json";
+    // Correct URL per official docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
+    this.apiUrl = "https://partner.yandex.ru/api/statistics2/get.json";
   }
 
   /**
@@ -74,11 +75,10 @@ class YandexClient {
   /**
    * Make authenticated request to Yandex API
    * 
-   * Yandex Partner API supports OAuth token via:
-   * 1. Authorization header: "OAuth <token>"
-   * 2. Query parameter: oauth_token=<token>
+   * API Docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
+   * Authentication: Authorization header with "OAuth <token>"
    * 
-   * We try both methods for compatibility.
+   * Array parameters (like period, field) are serialized correctly by axios.paramsSerializer
    */
   private async makeApiRequest(
     params: Record<string, string | number | string[]>
@@ -88,14 +88,14 @@ class YandexClient {
       console.log("[Yandex API] Params:", JSON.stringify(params, null, 2));
 
       const response = await axios.get(this.apiUrl, {
-        params: {
-          ...params,
-          oauth_token: this.apiToken, // Query param method
-          lang: "en",
+        params,
+        // Serialize arrays as repeated params: field=a&field=b (not field[]=a)
+        paramsSerializer: {
+          indexes: null, // This makes arrays serialize as key=val1&key=val2
         },
         headers: {
           Accept: "application/json",
-          Authorization: `OAuth ${this.apiToken}`, // Header method
+          Authorization: `OAuth ${this.apiToken}`,
         },
         timeout: 60000,
       });
@@ -103,11 +103,12 @@ class YandexClient {
       console.log("[Yandex API] Response status:", response.status);
       console.log("[Yandex API] Response data preview:", JSON.stringify(response.data).substring(0, 500));
 
-      if (response.data?.error) {
-        console.error("[Yandex API] Error in response:", response.data.error);
+      // Check for Yandex error response
+      if (response.data?.result === "error") {
+        console.error("[Yandex API] Error in response:", response.data);
         return {
           success: false,
-          error: response.data.error.message || response.data.error,
+          error: response.data.error?.message || response.data.error || "API returned error",
         };
       }
 
@@ -137,26 +138,58 @@ class YandexClient {
 
   /**
    * Transform Yandex API response to our standard format
+   * 
+   * Response format (per docs):
+   * {
+   *   "result": "ok",
+   *   "data": {
+   *     "points": [
+   *       {
+   *         "dimensions": { "date": ["2024-12-01"], "domain": "example.com" },
+   *         "measures": [{ "shows": 100, "clicks": 5, "partner_wo_nds": 1.50 }]
+   *       }
+   *     ],
+   *     "totals": { ... }
+   *   }
+   * }
    */
   private transformToRevenueData(
-    data: Record<string, unknown>
+    responseData: Record<string, unknown>
   ): YandexRevenueData[] {
     const results: YandexRevenueData[] = [];
 
-    // Yandex API returns data in a specific structure
-    // The response typically has a "data" array with rows
-    const rows = (data.data as Array<Record<string, unknown>>) || [];
+    // Navigate to the correct data structure
+    const data = responseData.data as Record<string, unknown> | undefined;
+    if (!data) {
+      console.warn("[Yandex API] No 'data' field in response");
+      return results;
+    }
 
-    for (const row of rows) {
+    // Get points array
+    const points = (data.points as Array<Record<string, unknown>>) || [];
+    console.log(`[Yandex API] Processing ${points.length} data points`);
+
+    for (const point of points) {
       // Extract dimensions
-      const dimensions = row.dimensions as Record<string, unknown> || {};
-      const date = (dimensions.date as string) || "";
-      const domain = (dimensions.domain as string) || undefined;
-      const tagId = (dimensions.tag_id as string) || undefined;
-      const tagName = (dimensions.tag_name as string) || undefined;
+      const dimensions = point.dimensions as Record<string, unknown> || {};
+      
+      // Date can be an array or string
+      let date = "";
+      const dateVal = dimensions.date;
+      if (Array.isArray(dateVal) && dateVal.length > 0) {
+        date = String(dateVal[0]);
+      } else if (typeof dateVal === "string") {
+        date = dateVal;
+      }
+      
+      const domain = typeof dimensions.domain === "string" ? dimensions.domain : undefined;
+      const tagId = typeof dimensions.tag_id === "string" ? dimensions.tag_id : undefined;
+      const tagName = typeof dimensions.tag_name === "string" ? dimensions.tag_name : undefined;
 
-      // Extract metrics
-      const metrics = row.metrics as Record<string, number> || {};
+      // Extract measures (usually an array with one object)
+      const measuresArray = point.measures as Array<Record<string, number>> || [];
+      const metrics = measuresArray[0] || {};
+      
       const impressions = metrics.shows || metrics.hits || 0;
       const clicks = metrics.clicks || 0;
       const revenue = metrics.partner_wo_nds || metrics.money || 0;
@@ -184,10 +217,16 @@ class YandexClient {
   /**
    * Fetch revenue data from Yandex
    * 
-   * Yandex Partner Statistics API required parameters:
-   * - date1, date2: Date range
-   * - period: Grouping period (day, week, month, total)
-   * - field: Fields to return (date, domain, tag, etc.)
+   * API Docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
+   * 
+   * Required parameters:
+   * - lang: Response language
+   * - period: Time interval (30days, thismonth, etc.) OR two dates: period=date1&period=date2
+   * - field: Fields to include (specify multiple times, not comma-separated)
+   * 
+   * Grouping parameters:
+   * - dimension_field: For date grouping (e.g., date|day)
+   * - entity_field: For entity grouping (e.g., domain, page_id)
    */
   async getRevenueData(
     params: YandexReportParams = {}
@@ -205,15 +244,19 @@ class YandexClient {
 
       console.log(`[Yandex API] Fetching data from ${startDate} to ${endDate}`);
 
-      // Build API request with required parameters
-      // Based on Yandex Partner Statistics API v2
+      // Build API request with correct parameter format per official docs
+      // https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
       const requestParams: Record<string, string | number | string[]> = {
-        date1: startDate,
-        date2: endDate,
-        period: "day", // Required: grouping period
-        field: "date,domain,tag,shows,clicks,partner_wo_nds", // Required: fields to return
-        currency: "usd",
         lang: "en",
+        // Period can be predefined (30days) or date range [startDate, endDate]
+        period: [startDate, endDate], // Array for date range
+        // Fields must be specified as array (sent as multiple params)
+        field: ["shows", "clicks", "partner_wo_nds"],
+        // Grouping by date (day)
+        dimension_field: "date|day",
+        // Grouping by domain
+        entity_field: "domain",
+        currency: "USD",
       };
 
       const result = await this.makeApiRequest(requestParams);
