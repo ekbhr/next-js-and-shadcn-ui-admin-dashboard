@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 import { redirect } from "next/navigation";
 import { getDashboardSummary, getSyncStatus, getRevenueComparison } from "@/lib/revenue-db";
-import { canViewGrossRevenue } from "@/lib/roles";
+import { canViewGrossRevenue, isAdmin } from "@/lib/roles";
 import { DashboardCards } from "./_components/dashboard-cards";
 import { DashboardChart } from "./_components/dashboard-chart";
 import { TopDomains } from "./_components/top-domains";
@@ -40,6 +40,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     getRevenueComparison(session.user.id),
   ]);
   const showGrossRevenue = canViewGrossRevenue(session.user.role);
+  const userIsAdmin = isAdmin(session.user.role);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -58,6 +59,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <SyncStatus 
         lastSync={syncStatus.lastSync}
         recordCounts={syncStatus.recordCounts}
+        isAdmin={userIsAdmin}
       />
 
       {/* Summary Cards */}

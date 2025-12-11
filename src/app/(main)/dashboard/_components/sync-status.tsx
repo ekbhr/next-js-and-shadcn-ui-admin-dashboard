@@ -1,12 +1,14 @@
 /**
  * Sync Status Component
  * 
- * Shows the last sync time for each network and record counts.
+ * Shows different views for admin vs publisher:
+ * - Admin: Detailed sync status with network breakdown
+ * - Publisher: Friendly message about data updates
  */
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Database, CheckCircle, AlertCircle } from "lucide-react";
+import { Clock, Database, CheckCircle, AlertCircle, CalendarClock, RefreshCw } from "lucide-react";
 import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface SyncStatusProps {
@@ -20,6 +22,8 @@ interface SyncStatusProps {
     yandex: number;
     overview: number;
   };
+  /** If true, shows detailed admin view. If false, shows friendly publisher view */
+  isAdmin?: boolean;
 }
 
 function formatTimeAgo(date: Date | null): string {
@@ -51,9 +55,46 @@ function getSyncHealthStatus(date: Date | null): "healthy" | "warning" | "error"
   return "error";
 }
 
-export function SyncStatus({ lastSync, recordCounts }: SyncStatusProps) {
+export function SyncStatus({ lastSync, recordCounts, isAdmin = false }: SyncStatusProps) {
   const overallStatus = getSyncHealthStatus(lastSync.overall);
+  const hasData = recordCounts.overview > 0;
 
+  // Publisher-friendly view
+  if (!isAdmin) {
+    return (
+      <Card className="bg-muted/30 border-dashed">
+        <CardContent className="py-3 px-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              {hasData ? (
+                <>
+                  <CalendarClock className="h-4 w-4 text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    Revenue data is updated{" "}
+                    <span className="font-medium text-foreground">daily at 9:00 AM (Dubai)</span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    Your revenue data will appear here once synced
+                  </span>
+                </>
+              )}
+            </div>
+            {hasData && lastSync.overall && (
+              <span className="text-xs text-muted-foreground">
+                Last updated: {formatLastUpdate(lastSync.overall)}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Admin detailed view
   return (
     <Card className="bg-muted/30">
       <CardContent className="py-3 px-4">
@@ -107,5 +148,22 @@ export function SyncStatus({ lastSync, recordCounts }: SyncStatusProps) {
       </CardContent>
     </Card>
   );
+}
+
+/** Format date in a friendly way for publishers */
+function formatLastUpdate(date: Date): string {
+  const now = new Date();
+  const d = new Date(date);
+  const diffMs = now.getTime() - d.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  
+  if (diffHours < 1) return "Just now";
+  if (diffHours < 24) return "Today";
+  if (diffHours < 48) return "Yesterday";
+  
+  return d.toLocaleDateString("en-US", { 
+    month: "short", 
+    day: "numeric" 
+  });
 }
 
