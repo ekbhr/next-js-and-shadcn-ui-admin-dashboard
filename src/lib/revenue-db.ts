@@ -1069,3 +1069,83 @@ export async function syncYandexToOverviewReport(userId: string | null = null): 
   return { synced, errors };
 }
 
+// ============================================
+// SYNC STATUS FUNCTIONS
+// ============================================
+
+/**
+ * Get the last sync time for each network
+ */
+export async function getLastSyncTime(userId?: string): Promise<{
+  sedo: Date | null;
+  yandex: Date | null;
+  overall: Date | null;
+}> {
+  const where = userId ? { userId } : {};
+
+  // Get most recent updatedAt for each network
+  const [sedoRecord, yandexRecord] = await Promise.all([
+    prisma.bidder_Sedo.findFirst({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
+    prisma.bidder_Yandex.findFirst({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
+  ]);
+
+  const sedoTime = sedoRecord?.updatedAt || null;
+  const yandexTime = yandexRecord?.updatedAt || null;
+
+  // Get the most recent overall
+  let overall: Date | null = null;
+  if (sedoTime && yandexTime) {
+    overall = sedoTime > yandexTime ? sedoTime : yandexTime;
+  } else {
+    overall = sedoTime || yandexTime;
+  }
+
+  return {
+    sedo: sedoTime,
+    yandex: yandexTime,
+    overall,
+  };
+}
+
+/**
+ * Get sync status summary
+ */
+export async function getSyncStatus(userId?: string): Promise<{
+  lastSync: {
+    sedo: Date | null;
+    yandex: Date | null;
+    overall: Date | null;
+  };
+  recordCounts: {
+    sedo: number;
+    yandex: number;
+    overview: number;
+  };
+}> {
+  const where = userId ? { userId } : {};
+
+  const [lastSync, sedoCount, yandexCount, overviewCount] = await Promise.all([
+    getLastSyncTime(userId),
+    prisma.bidder_Sedo.count({ where }),
+    prisma.bidder_Yandex.count({ where }),
+    prisma.overview_Report.count({ where }),
+  ]);
+
+  return {
+    lastSync,
+    recordCounts: {
+      sedo: sedoCount,
+      yandex: yandexCount,
+      overview: overviewCount,
+    },
+  };
+}
+

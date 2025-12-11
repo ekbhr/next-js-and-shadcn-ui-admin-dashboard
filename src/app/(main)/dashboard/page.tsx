@@ -13,12 +13,13 @@ export const metadata: Metadata = {
   title: "RevEngine Media - Dashboard",
 };
 import { redirect } from "next/navigation";
-import { getDashboardSummary } from "@/lib/revenue-db";
+import { getDashboardSummary, getSyncStatus } from "@/lib/revenue-db";
 import { canViewGrossRevenue } from "@/lib/roles";
 import { DashboardCards } from "./_components/dashboard-cards";
 import { DashboardChart } from "./_components/dashboard-chart";
 import { TopDomains } from "./_components/top-domains";
 import { PeriodToggle } from "./_components/period-toggle";
+import { SyncStatus } from "./_components/sync-status";
 
 interface PageProps {
   searchParams: Promise<{ period?: string }>;
@@ -33,7 +34,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const params = await searchParams;
   const period = params.period === "last" ? "last" : "current";
-  const data = await getDashboardSummary(session.user.id, period);
+  const [data, syncStatus] = await Promise.all([
+    getDashboardSummary(session.user.id, period),
+    getSyncStatus(session.user.id),
+  ]);
   const showGrossRevenue = canViewGrossRevenue(session.user.role);
 
   return (
@@ -48,6 +52,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </div>
         <PeriodToggle currentPeriod={period} />
       </div>
+
+      {/* Sync Status */}
+      <SyncStatus 
+        lastSync={syncStatus.lastSync}
+        recordCounts={syncStatus.recordCounts}
+      />
 
       {/* Summary Cards */}
       <DashboardCards 
