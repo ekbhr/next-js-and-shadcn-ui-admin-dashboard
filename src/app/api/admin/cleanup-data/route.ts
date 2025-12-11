@@ -2,7 +2,7 @@
  * Admin Data Cleanup API
  * 
  * DELETE /api/admin/cleanup-data
- * Removes all revenue data (Bidder_Sedo and Overview_Report) for cleanup before resync.
+ * Removes all revenue data (Bidder_Sedo, Bidder_Yandex, and Overview_Report) for cleanup before resync.
  * 
  * GET /api/admin/cleanup-data?userId=xxx
  * Removes data for a specific user only.
@@ -37,8 +37,9 @@ export async function DELETE(request: Request) {
 
     if (userId) {
       // Delete data for specific user
-      const [sedoDeleted, overviewDeleted] = await Promise.all([
+      const [sedoDeleted, yandexDeleted, overviewDeleted] = await Promise.all([
         prisma.bidder_Sedo.deleteMany({ where: { userId } }),
+        prisma.bidder_Yandex.deleteMany({ where: { userId } }),
         prisma.overview_Report.deleteMany({ where: { userId } }),
       ]);
 
@@ -47,22 +48,25 @@ export async function DELETE(request: Request) {
         message: `Deleted data for user ${userId}`,
         deleted: {
           bidderSedo: sedoDeleted.count,
+          bidderYandex: yandexDeleted.count,
           overviewReport: overviewDeleted.count,
         },
       });
     }
 
     // Delete ALL data (for full resync)
-    const [sedoDeleted, overviewDeleted] = await Promise.all([
+    const [sedoDeleted, yandexDeleted, overviewDeleted] = await Promise.all([
       prisma.bidder_Sedo.deleteMany({}),
+      prisma.bidder_Yandex.deleteMany({}),
       prisma.overview_Report.deleteMany({}),
     ]);
 
     return NextResponse.json({
       success: true,
-      message: "All revenue data deleted. Ready for resync.",
+      message: "All revenue data deleted (Sedo + Yandex + Overview). Ready for resync.",
       deleted: {
         bidderSedo: sedoDeleted.count,
+        bidderYandex: yandexDeleted.count,
         overviewReport: overviewDeleted.count,
       },
     });
@@ -95,20 +99,26 @@ export async function GET() {
       );
     }
 
-    // Get counts by user
-    const sedoByUser = await prisma.bidder_Sedo.groupBy({
-      by: ["userId"],
-      _count: true,
-    });
-
-    const overviewByUser = await prisma.overview_Report.groupBy({
-      by: ["userId"],
-      _count: true,
-    });
+    // Get counts by user for all tables
+    const [sedoByUser, yandexByUser, overviewByUser] = await Promise.all([
+      prisma.bidder_Sedo.groupBy({
+        by: ["userId"],
+        _count: true,
+      }),
+      prisma.bidder_Yandex.groupBy({
+        by: ["userId"],
+        _count: true,
+      }),
+      prisma.overview_Report.groupBy({
+        by: ["userId"],
+        _count: true,
+      }),
+    ]);
 
     // Get user details
     const userIds = [...new Set([
       ...sedoByUser.map(s => s.userId),
+      ...yandexByUser.map(y => y.userId),
       ...overviewByUser.map(o => o.userId),
     ])];
 
@@ -124,6 +134,7 @@ export async function GET() {
       email: userMap.get(userId)?.email || "Unknown",
       name: userMap.get(userId)?.name || null,
       sedoRecords: sedoByUser.find(s => s.userId === userId)?._count || 0,
+      yandexRecords: yandexByUser.find(y => y.userId === userId)?._count || 0,
       overviewRecords: overviewByUser.find(o => o.userId === userId)?._count || 0,
     }));
 
@@ -132,6 +143,7 @@ export async function GET() {
       dataByUser,
       totals: {
         sedoRecords: sedoByUser.reduce((sum, s) => sum + s._count, 0),
+        yandexRecords: yandexByUser.reduce((sum, y) => sum + y._count, 0),
         overviewRecords: overviewByUser.reduce((sum, s) => sum + s._count, 0),
       },
     });
