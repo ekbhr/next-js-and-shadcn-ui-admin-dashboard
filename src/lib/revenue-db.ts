@@ -3,9 +3,12 @@
  * 
  * Handles saving and retrieving revenue data from the database.
  * Supports upsert logic (update if exists, insert if new).
+ * 
+ * OPTIMIZED: Uses caching for frequently accessed data
  */
 
 import { prisma } from "@/lib/prisma";
+import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
 import type { SedoRevenueData } from "@/lib/sedo";
 import type { YandexRevenueData } from "@/lib/yandex";
 
@@ -207,6 +210,10 @@ export async function saveSedoRevenue(
   }
 
   console.log(`[Revenue DB] Sedo data saved: ${saved} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
+  
+  // Invalidate dashboard cache after sync
+  cache.invalidatePrefix("dashboard:");
+  cache.invalidatePrefix("sync-status:");
   
   return { saved, updated, skipped, errors };
 }
@@ -628,8 +635,177 @@ export async function getOverviewReport(
 
 /**
  * Get dashboard summary data (aggregated by date, not network)
+ * OPTIMIZED: Uses database aggregation + caching
  */
 export async function getDashboardSummary(
+  userId: string,
+  period: "current" | "last" = "current"
+) {
+  return cache.get(
+    CacheKeys.dashboardSummary(userId, period),
+    async () => getDashboardSummaryImpl(userId, period),
+    CacheTTL.MEDIUM // 5 minutes
+  );
+}
+
+async function getDashboardSummaryImpl(
+  userId: string,
+  period: "current" | "last" = "current"
+) {
+  // Calculate date range
+  const now = new Date();
+  let startDate: Date;
+  let endDate: Date;
+
+  if (period === "current") {
+    // Current month: 1st of this month to today
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    endDate = now;
+  } else {
+    // Last month: 1st to last day of previous month
+    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    endDate = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of previous month
+  }
+
+  // OPTIMIZED: Get aggregated data in parallel
+  const whereClause = {
+    userId,
+    date: {
+      gte: startDate,
+      lte: endDate,
+    },
+  };
+
+  const [totalsAgg, byNetworkAgg, dailyData, topDomainsAgg] = await Promise.all([
+    // Total aggregates (1 query)
+    prisma.overview_Report.aggregate({
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
+    
+    // Group by network (1 query)
+    prisma.overview_Report.groupBy({
+      by: ["network"],
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
+    
+    // Daily data (1 query)
+    prisma.overview_Report.findMany({
+      where: whereClause,
+      orderBy: { date: "asc" },
+    }),
+    
+    // Top domains (1 query)
+    prisma.overview_Report.groupBy({
+      by: ["domain"],
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+      },
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+      take: 5,
+    }),
+  ]);
+
+  // Aggregate daily data by date (combine all networks)
+  const dailyMap = new Map<string, {
+    date: string;
+    grossRevenue: number;
+    netRevenue: number;
+    impressions: number;
+    clicks: number;
+  }>();
+
+  for (const record of dailyData) {
+    const dateKey = record.date.toISOString().split("T")[0];
+    const existing = dailyMap.get(dateKey);
+
+    if (existing) {
+      existing.grossRevenue += record.grossRevenue;
+      existing.netRevenue += record.netRevenue;
+      existing.impressions += record.impressions;
+      existing.clicks += record.clicks;
+    } else {
+      dailyMap.set(dateKey, {
+        date: dateKey,
+        grossRevenue: record.grossRevenue,
+        netRevenue: record.netRevenue,
+        impressions: record.impressions,
+        clicks: record.clicks,
+      });
+    }
+  }
+
+  const dailyDataFormatted = Array.from(dailyMap.values()).sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // Format totals
+  const totalGross = totalsAgg._sum.grossRevenue || 0;
+  const totalImpressions = totalsAgg._sum.impressions || 0;
+  const totalClicks = totalsAgg._sum.clicks || 0;
+
+  const totals = {
+    grossRevenue: Math.round(totalGross * 100) / 100,
+    netRevenue: Math.round((totalsAgg._sum.netRevenue || 0) * 100) / 100,
+    impressions: totalImpressions,
+    clicks: totalClicks,
+    ctr: totalImpressions > 0 
+      ? Math.round((totalClicks / totalImpressions) * 10000) / 100 
+      : 0,
+    rpm: totalImpressions > 0 
+      ? Math.round((totalGross / totalImpressions) * 1000 * 100) / 100 
+      : 0,
+  };
+
+  // Format network breakdown
+  const byNetwork = byNetworkAgg.map((n) => ({
+    network: n.network || "unknown",
+    grossRevenue: Math.round((n._sum.grossRevenue || 0) * 100) / 100,
+    netRevenue: Math.round((n._sum.netRevenue || 0) * 100) / 100,
+    impressions: n._sum.impressions || 0,
+    clicks: n._sum.clicks || 0,
+  }));
+
+  // Format top domains
+  const topDomains = topDomainsAgg.map((d) => ({
+    domain: d.domain || "All Domains",
+    grossRevenue: d._sum.grossRevenue || 0,
+    netRevenue: d._sum.netRevenue || 0,
+  }));
+
+  return {
+    period,
+    dateRange: {
+      start: startDate.toISOString().split("T")[0],
+      end: endDate.toISOString().split("T")[0],
+    },
+    totals,
+    byNetwork,
+    dailyData: dailyDataFormatted,
+    topDomains,
+  };
+}
+
+// Keep the old implementation for reference but mark as deprecated
+/** @deprecated Use getDashboardSummary instead */
+async function getDashboardSummaryLegacy(
   userId: string,
   period: "current" | "last" = "current"
 ) {
@@ -1013,6 +1189,11 @@ export async function saveYandexRevenue(
   }
 
   console.log(`[Revenue DB] Yandex data: ${saved} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
+  
+  // Invalidate dashboard cache after sync
+  cache.invalidatePrefix("dashboard:");
+  cache.invalidatePrefix("sync-status:");
+  
   return { saved, updated, skipped, errors };
 }
 
@@ -1241,7 +1422,7 @@ export async function getLastSyncTime(userId?: string): Promise<{
 }
 
 /**
- * Get sync status summary
+ * Get sync status summary (CACHED for 30 seconds)
  */
 export async function getSyncStatus(userId?: string): Promise<{
   lastSync: {
@@ -1255,22 +1436,28 @@ export async function getSyncStatus(userId?: string): Promise<{
     overview: number;
   };
 }> {
-  const where = userId ? { userId } : {};
+  return cache.get(
+    CacheKeys.syncStatus(userId),
+    async () => {
+      const where = userId ? { userId } : {};
 
-  const [lastSync, sedoCount, yandexCount, overviewCount] = await Promise.all([
-    getLastSyncTime(userId),
-    prisma.bidder_Sedo.count({ where }),
-    prisma.bidder_Yandex.count({ where }),
-    prisma.overview_Report.count({ where }),
-  ]);
+      const [lastSync, sedoCount, yandexCount, overviewCount] = await Promise.all([
+        getLastSyncTime(userId),
+        prisma.bidder_Sedo.count({ where }),
+        prisma.bidder_Yandex.count({ where }),
+        prisma.overview_Report.count({ where }),
+      ]);
 
-  return {
-    lastSync,
-    recordCounts: {
-      sedo: sedoCount,
-      yandex: yandexCount,
-      overview: overviewCount,
+      return {
+        lastSync,
+        recordCounts: {
+          sedo: sedoCount,
+          yandex: yandexCount,
+          overview: overviewCount,
+        },
+      };
     },
-  };
+    CacheTTL.SHORT // 30 seconds
+  );
 }
 

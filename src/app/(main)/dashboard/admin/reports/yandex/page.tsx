@@ -3,6 +3,8 @@
  * 
  * Detailed Yandex revenue data across all users.
  * Shows gross and net revenue with domain and tag breakdown.
+ * 
+ * OPTIMIZED: Uses database aggregation instead of fetching all records
  */
 
 import type { Metadata } from "next";
@@ -33,152 +35,162 @@ export default async function AdminYandexReportPage() {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 31);
 
-  // Get all Yandex reports
-  const yandexReports = await prisma.bidder_Yandex.findMany({
-    where: {
-      date: {
-        gte: startDate,
-        lte: endDate,
-      },
+  const dateWhere = {
+    date: {
+      gte: startDate,
+      lte: endDate,
     },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: { date: "desc" },
-  });
-
-  // Calculate totals per domain
-  const domainTotals = new Map<string, {
-    domain: string;
-    grossRevenue: number;
-    netRevenue: number;
-    impressions: number;
-    clicks: number;
-    recordCount: number;
-  }>();
-
-  // Calculate totals per tag
-  const tagTotals = new Map<string, {
-    tagId: string;
-    tagName: string;
-    domain?: string;
-    grossRevenue: number;
-    netRevenue: number;
-    impressions: number;
-    clicks: number;
-    recordCount: number;
-  }>();
-
-  // Calculate totals per user
-  const userTotals = new Map<string, {
-    userId: string;
-    userName: string | null;
-    userEmail: string;
-    grossRevenue: number;
-    netRevenue: number;
-    impressions: number;
-    clicks: number;
-    domainCount: number;
-  }>();
-
-  const uniqueDomains = new Set<string>();
-  const uniqueTags = new Set<string>();
-
-  for (const report of yandexReports) {
-    const domain = report.domain || "Unknown";
-    const tagId = report.tagId || "Unknown";
-    
-    if (report.domain) uniqueDomains.add(report.domain);
-    if (report.tagId) uniqueTags.add(report.tagId);
-
-    // Domain totals
-    const existingDomain = domainTotals.get(domain);
-    if (existingDomain) {
-      existingDomain.grossRevenue += report.grossRevenue;
-      existingDomain.netRevenue += report.netRevenue;
-      existingDomain.impressions += report.impressions;
-      existingDomain.clicks += report.clicks;
-      existingDomain.recordCount += 1;
-    } else {
-      domainTotals.set(domain, {
-        domain,
-        grossRevenue: report.grossRevenue,
-        netRevenue: report.netRevenue,
-        impressions: report.impressions,
-        clicks: report.clicks,
-        recordCount: 1,
-      });
-    }
-
-    // Tag totals
-    const existingTag = tagTotals.get(tagId);
-    if (existingTag) {
-      existingTag.grossRevenue += report.grossRevenue;
-      existingTag.netRevenue += report.netRevenue;
-      existingTag.impressions += report.impressions;
-      existingTag.clicks += report.clicks;
-      existingTag.recordCount += 1;
-    } else {
-      tagTotals.set(tagId, {
-        tagId,
-        tagName: report.tagName || tagId,
-        domain: report.domain || undefined,
-        grossRevenue: report.grossRevenue,
-        netRevenue: report.netRevenue,
-        impressions: report.impressions,
-        clicks: report.clicks,
-        recordCount: 1,
-      });
-    }
-
-    // User totals
-    const existingUser = userTotals.get(report.userId);
-    if (existingUser) {
-      existingUser.grossRevenue += report.grossRevenue;
-      existingUser.netRevenue += report.netRevenue;
-      existingUser.impressions += report.impressions;
-      existingUser.clicks += report.clicks;
-    } else {
-      userTotals.set(report.userId, {
-        userId: report.userId,
-        userName: report.user.name,
-        userEmail: report.user.email,
-        grossRevenue: report.grossRevenue,
-        netRevenue: report.netRevenue,
-        impressions: report.impressions,
-        clicks: report.clicks,
-        domainCount: 0,
-      });
-    }
-  }
-
-  // Grand totals
-  const grandTotals = {
-    grossRevenue: 0,
-    netRevenue: 0,
-    impressions: 0,
-    clicks: 0,
-    userCount: userTotals.size,
-    domainCount: uniqueDomains.size,
-    tagCount: uniqueTags.size,
-    recordCount: yandexReports.length,
   };
 
-  for (const [, total] of domainTotals) {
-    grandTotals.grossRevenue += total.grossRevenue;
-    grandTotals.netRevenue += total.netRevenue;
-    grandTotals.impressions += total.impressions;
-    grandTotals.clicks += total.clicks;
-  }
+  // OPTIMIZED: Use parallel database queries with aggregation
+  const [
+    grandTotalsRaw,
+    domainTotalsRaw,
+    tagTotalsRaw,
+    userTotalsRaw,
+    recentReports,
+  ] = await Promise.all([
+    // Grand totals using aggregate (1 query)
+    prisma.bidder_Yandex.aggregate({
+      where: dateWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      _count: true,
+    }),
+    
+    // Domain totals using groupBy (1 query)
+    prisma.bidder_Yandex.groupBy({
+      by: ["domain"],
+      where: dateWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      _count: true,
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+    }),
+    
+    // Tag totals using groupBy (1 query)
+    prisma.bidder_Yandex.groupBy({
+      by: ["tagId", "tagName"],
+      where: dateWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      _count: true,
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+    }),
+    
+    // User totals using groupBy (1 query)
+    prisma.bidder_Yandex.groupBy({
+      by: ["userId"],
+      where: dateWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      _count: true,
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+    }),
+    
+    // Recent reports with limit for table display (1 query)
+    prisma.bidder_Yandex.findMany({
+      where: dateWhere,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { date: "desc" },
+      take: 500, // Limit for performance
+    }),
+  ]);
+
+  // Get unique user emails for the user totals
+  const userIds = userTotalsRaw.map(u => u.userId);
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true },
+  });
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  // Format grand totals
+  const grandTotals = {
+    grossRevenue: grandTotalsRaw._sum.grossRevenue || 0,
+    netRevenue: grandTotalsRaw._sum.netRevenue || 0,
+    impressions: grandTotalsRaw._sum.impressions || 0,
+    clicks: grandTotalsRaw._sum.clicks || 0,
+    userCount: userTotalsRaw.length,
+    domainCount: domainTotalsRaw.filter(d => d.domain !== null).length,
+    tagCount: tagTotalsRaw.filter(t => t.tagId !== null).length,
+    recordCount: grandTotalsRaw._count,
+  };
+
+  // Format domain totals
+  const domainTotalsArray = domainTotalsRaw.map(d => ({
+    domain: d.domain || "Unknown",
+    grossRevenue: d._sum.grossRevenue || 0,
+    netRevenue: d._sum.netRevenue || 0,
+    impressions: d._sum.impressions || 0,
+    clicks: d._sum.clicks || 0,
+    recordCount: d._count,
+  }));
+
+  // Format tag totals
+  const tagTotalsArray = tagTotalsRaw.map(t => ({
+    tagId: t.tagId || "Unknown",
+    tagName: t.tagName || t.tagId || "Unknown",
+    grossRevenue: t._sum.grossRevenue || 0,
+    netRevenue: t._sum.netRevenue || 0,
+    impressions: t._sum.impressions || 0,
+    clicks: t._sum.clicks || 0,
+    recordCount: t._count,
+  }));
+
+  // Format user totals
+  const userTotalsArray = userTotalsRaw.map(u => {
+    const user = userMap.get(u.userId);
+    return {
+      userId: u.userId,
+      userName: user?.name || null,
+      userEmail: user?.email || "Unknown",
+      grossRevenue: u._sum.grossRevenue || 0,
+      netRevenue: u._sum.netRevenue || 0,
+      impressions: u._sum.impressions || 0,
+      clicks: u._sum.clicks || 0,
+      domainCount: 0,
+    };
+  });
 
   // Format reports for the table
-  const formattedReports = yandexReports.map((r) => ({
+  const formattedReports = recentReports.map((r) => ({
     id: r.id,
     date: r.date,
     domain: r.domain || "Unknown",
@@ -195,15 +207,6 @@ export default async function AdminYandexReportPage() {
     userEmail: r.user.email,
   }));
 
-  const domainTotalsArray = Array.from(domainTotals.values())
-    .sort((a, b) => b.grossRevenue - a.grossRevenue);
-
-  const tagTotalsArray = Array.from(tagTotals.values())
-    .sort((a, b) => b.grossRevenue - a.grossRevenue);
-
-  const userTotalsArray = Array.from(userTotals.values())
-    .sort((a, b) => b.grossRevenue - a.grossRevenue);
-
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Page Header */}
@@ -211,6 +214,11 @@ export default async function AdminYandexReportPage() {
         <h1 className="text-2xl font-bold">Yandex Report</h1>
         <p className="text-muted-foreground">
           Detailed Yandex Advertising Network revenue (last 31 days)
+          {grandTotals.recordCount > 500 && (
+            <span className="text-xs ml-2">
+              (showing latest 500 of {grandTotals.recordCount} records)
+            </span>
+          )}
         </p>
       </div>
 
