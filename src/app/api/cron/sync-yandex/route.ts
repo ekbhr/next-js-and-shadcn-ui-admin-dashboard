@@ -6,6 +6,11 @@
  * Automated daily sync of Yandex data.
  * Triggered by Vercel Cron at 6:00 AM UTC (10:00 AM Dubai).
  * 
+ * MULTI-ACCOUNT SUPPORT:
+ * - Checks for database-stored accounts first (NetworkAccount)
+ * - Falls back to environment variables if no DB accounts
+ * - Loops over all active accounts
+ * 
  * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN.
  * 
  * Security: Protected by CRON_SECRET environment variable.
@@ -13,9 +18,11 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { yandexClient } from "@/lib/yandex";
+import { yandexClient, createYandexClient } from "@/lib/yandex";
 import { saveYandexRevenue, syncYandexToOverviewReport } from "@/lib/revenue-db";
 import { notifySyncFailure } from "@/lib/notifications";
+import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
+import { isYandexCredentials } from "@/lib/encryption";
 
 // Verify cron request is from Vercel
 function verifyCronRequest(request: Request): boolean {
@@ -47,17 +54,6 @@ export async function GET(request: Request) {
   console.log("[Yandex Cron] Starting sync...");
   console.log(`[Yandex Cron] Time: ${new Date().toISOString()}`);
 
-  // Check if Yandex API is configured
-  const configStatus = yandexClient.getConfigStatus();
-  if (!configStatus.configured) {
-    console.error("[Yandex Cron] API not configured");
-    return NextResponse.json({
-      success: false,
-      error: "Yandex API not configured",
-      config: configStatus,
-    });
-  }
-
   try {
     // Find admin user as fallback
     const adminUser = await prisma.user.findFirst({
@@ -75,36 +71,131 @@ export async function GET(request: Request) {
 
     console.log(`[Yandex Cron] Using admin ${adminUser.email} as fallback`);
 
-    // Fetch Yandex data
-    const yandexData = await yandexClient.getRevenueData();
-    const yandexDomains = await yandexClient.getDomains();
+    // Get accounts to sync - check DB first, then env vars
+    const dbAccounts = await getActiveAccountsWithCredentials("yandex");
+    const useEnvFallback = dbAccounts.length === 0 && yandexClient.isConfigured();
 
-    if (!yandexData.success || !yandexData.data) {
-      const errorMsg = yandexData.error || "Failed to fetch Yandex data";
-      console.error("[Yandex Cron] Failed to fetch data:", errorMsg);
-      
-      // Send failure notification
-      await notifySyncFailure("Yandex", errorMsg, {
-        timestamp: new Date(),
-        additionalInfo: "Cron job failed to fetch data from Yandex API",
-      });
-      
+    if (dbAccounts.length === 0 && !useEnvFallback) {
+      console.error("[Yandex Cron] No accounts configured");
       return NextResponse.json({
         success: false,
-        error: errorMsg,
-        duration: Date.now() - startTime,
+        error: "No Yandex accounts configured. Add accounts in Admin Settings or set YANDEX_API environment variable.",
       });
     }
 
-    console.log(`[Yandex Cron] Fetched ${yandexData.data.length} records`);
-    console.log(`[Yandex Cron] Fetched ${yandexDomains.domains?.length || 0} domains`);
+    // Track results across all accounts
+    const accountResults: Array<{
+      accountId: string | null;
+      accountName: string;
+      fetched: number;
+      saved: number;
+      updated: number;
+      skipped: number;
+      errors: number;
+      error?: string;
+    }> = [];
 
-    // Save data to domain owners
-    console.log(`[Yandex Cron] Saving records to domain owners...`);
-    const saveResult = await saveYandexRevenue(yandexData.data, adminUser.id, {
-      saveToDomainOwner: true,
-      filterByAssignedDomains: false,
-    });
+    let totalFetched = 0;
+    let totalSaved = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+
+    // Sync from database accounts
+    for (const account of dbAccounts) {
+      if (!isYandexCredentials(account.credentials)) {
+        console.warn(`[Yandex Cron] Invalid credentials for account ${account.name}`);
+        continue;
+      }
+
+      console.log(`[Yandex Cron] Syncing account: ${account.name}`);
+      
+      try {
+        const client = createYandexClient(account.credentials, {
+          accountId: account.id,
+          accountName: account.name,
+        });
+
+        const yandexData = await client.getRevenueData();
+
+        if (!yandexData.success || !yandexData.data) {
+          accountResults.push({
+            accountId: account.id,
+            accountName: account.name,
+            fetched: 0, saved: 0, updated: 0, skipped: 0, errors: 1,
+            error: yandexData.error || "Failed to fetch data",
+          });
+          totalErrors++;
+          continue;
+        }
+
+        const saveResult = await saveYandexRevenue(yandexData.data, adminUser.id, {
+          saveToDomainOwner: true,
+          filterByAssignedDomains: false,
+          accountId: account.id,
+        });
+
+        accountResults.push({
+          accountId: account.id,
+          accountName: account.name,
+          fetched: yandexData.data.length,
+          saved: saveResult.saved,
+          updated: saveResult.updated,
+          skipped: saveResult.skipped,
+          errors: saveResult.errors.length,
+        });
+
+        totalFetched += yandexData.data.length;
+        totalSaved += saveResult.saved;
+        totalUpdated += saveResult.updated;
+        totalSkipped += saveResult.skipped;
+        totalErrors += saveResult.errors.length;
+      } catch (error) {
+        console.error(`[Yandex Cron] Error syncing account ${account.name}:`, error);
+        accountResults.push({
+          accountId: account.id,
+          accountName: account.name,
+          fetched: 0, saved: 0, updated: 0, skipped: 0, errors: 1,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        totalErrors++;
+      }
+    }
+
+    // Fallback to environment variables if no DB accounts
+    if (useEnvFallback) {
+      console.log("[Yandex Cron] Using environment variable credentials (legacy mode)");
+      
+      try {
+        const yandexData = await yandexClient.getRevenueData();
+
+        if (yandexData.success && yandexData.data) {
+          const saveResult = await saveYandexRevenue(yandexData.data, adminUser.id, {
+            saveToDomainOwner: true,
+            filterByAssignedDomains: false,
+          });
+
+          accountResults.push({
+            accountId: null,
+            accountName: "Environment Variables (Legacy)",
+            fetched: yandexData.data.length,
+            saved: saveResult.saved,
+            updated: saveResult.updated,
+            skipped: saveResult.skipped,
+            errors: saveResult.errors.length,
+          });
+
+          totalFetched += yandexData.data.length;
+          totalSaved += saveResult.saved;
+          totalUpdated += saveResult.updated;
+          totalSkipped += saveResult.skipped;
+          totalErrors += saveResult.errors.length;
+        }
+      } catch (error) {
+        console.error("[Yandex Cron] Error syncing from env vars:", error);
+        totalErrors++;
+      }
+    }
 
     // Sync to Overview Report
     console.log(`[Yandex Cron] Syncing to Overview Report...`);
@@ -112,34 +203,37 @@ export async function GET(request: Request) {
 
     const duration = Date.now() - startTime;
 
+    // Notify if there were errors
+    if (totalErrors > 0) {
+      await notifySyncFailure("Yandex", `Sync completed with ${totalErrors} errors`, {
+        timestamp: new Date(),
+        additionalInfo: `Accounts synced: ${accountResults.length}`,
+      });
+    }
+
     console.log(`[Yandex Cron] Sync complete in ${duration}ms`);
-    console.log(`[Yandex Cron] Results: ${saveResult.saved} saved, ${saveResult.updated} updated, ${saveResult.skipped} skipped`);
+    console.log(`[Yandex Cron] Results: ${totalSaved} saved, ${totalUpdated} updated, ${totalSkipped} skipped`);
 
     return NextResponse.json({
-      success: true,
-      message: "Yandex cron sync completed",
+      success: totalErrors === 0 || totalSaved > 0,
+      message: `Yandex cron sync completed - ${accountResults.length} account(s)`,
       timestamp: new Date().toISOString(),
       duration: `${duration}ms`,
+      accounts: accountResults,
       summary: {
-        recordsFetched: yandexData.data.length,
-        recordsSaved: saveResult.saved,
-        recordsUpdated: saveResult.updated,
-        recordsSkipped: saveResult.skipped,
+        accountsProcessed: accountResults.length,
+        recordsFetched: totalFetched,
+        recordsSaved: totalSaved,
+        recordsUpdated: totalUpdated,
+        recordsSkipped: totalSkipped,
         overviewSynced: overviewResult.synced,
-        domainsFetched: yandexDomains.domains?.length || 0,
-        dateRange: yandexData.dateRange,
-        errors: saveResult.errors.length + overviewResult.errors.length,
-      },
-      details: {
-        saveErrors: saveResult.errors.length > 0 ? saveResult.errors.slice(0, 10) : undefined,
-        overviewErrors: overviewResult.errors.length > 0 ? overviewResult.errors.slice(0, 10) : undefined,
+        errors: totalErrors,
       },
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[Yandex Cron] Error:", error);
     
-    // Send failure notification
     await notifySyncFailure("Yandex", errorMsg, {
       timestamp: new Date(),
       additionalInfo: "Unexpected error during cron sync",
