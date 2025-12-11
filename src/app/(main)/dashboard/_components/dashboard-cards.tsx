@@ -7,7 +7,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, Eye, MousePointer } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Eye, MousePointer, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface NetworkData {
@@ -16,6 +16,13 @@ interface NetworkData {
   netRevenue: number;
   impressions: number;
   clicks: number;
+}
+
+interface ChangeData {
+  grossRevenue: { value: number; percent: number };
+  netRevenue: { value: number; percent: number };
+  impressions: { value: number; percent: number };
+  clicks: { value: number; percent: number };
 }
 
 interface DashboardCardsProps {
@@ -28,6 +35,7 @@ interface DashboardCardsProps {
     rpm: number;
   };
   byNetwork?: NetworkData[];
+  comparison?: ChangeData; // Comparison with previous period
   showGrossRevenue?: boolean; // Only true for admin users
 }
 
@@ -39,7 +47,36 @@ const networkConfig: Record<string, { label: string; color: string }> = {
   unknown: { label: "Other", color: "bg-gray-100 text-gray-800" },
 };
 
-export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = false }: DashboardCardsProps) {
+// Change indicator component
+function ChangeIndicator({ percent, value, prefix = "" }: { percent: number; value?: number; prefix?: string }) {
+  if (percent === 0) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Minus className="h-3 w-3" />
+        No change
+      </span>
+    );
+  }
+  
+  const isPositive = percent > 0;
+  return (
+    <span className={`flex items-center gap-1 text-xs ${isPositive ? "text-green-600" : "text-red-600"}`}>
+      {isPositive ? (
+        <TrendingUp className="h-3 w-3" />
+      ) : (
+        <TrendingDown className="h-3 w-3" />
+      )}
+      {isPositive ? "+" : ""}{percent.toFixed(1)}%
+      {value !== undefined && (
+        <span className="text-muted-foreground">
+          ({isPositive ? "+" : ""}{prefix}{typeof value === 'number' && value % 1 !== 0 ? value.toFixed(2) : value.toLocaleString()})
+        </span>
+      )}
+    </span>
+  );
+}
+
+export function DashboardCards({ totals, byNetwork = [], comparison, showGrossRevenue = false }: DashboardCardsProps) {
   // Format network breakdown for display
   const networkBreakdown = byNetwork.map((n) => {
     const config = networkConfig[n.network] || networkConfig.unknown;
@@ -58,6 +95,8 @@ export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = fals
       description: `RPM: €${totals.rpm.toFixed(2)}`,
       icon: DollarSign,
       color: "text-blue-600",
+      change: comparison?.grossRevenue,
+      changePrefix: "€",
     }] : []),
     {
       title: "Revenue",
@@ -65,6 +104,8 @@ export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = fals
       description: showGrossRevenue ? "Your share (after revShare)" : "Total earnings",
       icon: TrendingUp,
       color: "text-green-600",
+      change: comparison?.netRevenue,
+      changePrefix: "€",
     },
     {
       title: "Impressions",
@@ -72,6 +113,8 @@ export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = fals
       description: "Total page views",
       icon: Eye,
       color: "text-purple-600",
+      change: comparison?.impressions,
+      changePrefix: "",
     },
     {
       title: "Clicks",
@@ -79,6 +122,8 @@ export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = fals
       description: `CTR: ${totals.ctr}%`,
       icon: MousePointer,
       color: "text-orange-600",
+      change: comparison?.clicks,
+      changePrefix: "",
     },
   ];
 
@@ -94,7 +139,16 @@ export function DashboardCards({ totals, byNetwork = [], showGrossRevenue = fals
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-              <p className="text-xs text-muted-foreground">{card.description}</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-muted-foreground">{card.description}</p>
+                {card.change && (
+                  <ChangeIndicator 
+                    percent={card.change.percent} 
+                    value={card.change.value}
+                    prefix={card.changePrefix}
+                  />
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}

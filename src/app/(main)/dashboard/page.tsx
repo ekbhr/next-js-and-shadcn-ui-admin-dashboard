@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   title: "RevEngine Media - Dashboard",
 };
 import { redirect } from "next/navigation";
-import { getDashboardSummary, getSyncStatus } from "@/lib/revenue-db";
+import { getDashboardSummary, getSyncStatus, getRevenueComparison } from "@/lib/revenue-db";
 import { canViewGrossRevenue } from "@/lib/roles";
 import { DashboardCards } from "./_components/dashboard-cards";
 import { DashboardChart } from "./_components/dashboard-chart";
@@ -34,9 +34,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const params = await searchParams;
   const period = params.period === "last" ? "last" : "current";
-  const [data, syncStatus] = await Promise.all([
+  const [data, syncStatus, comparison] = await Promise.all([
     getDashboardSummary(session.user.id, period),
     getSyncStatus(session.user.id),
+    getRevenueComparison(session.user.id),
   ]);
   const showGrossRevenue = canViewGrossRevenue(session.user.role);
 
@@ -63,6 +64,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <DashboardCards 
         totals={data.totals} 
         byNetwork={data.byNetwork}
+        comparison={period === "current" ? comparison.change : undefined}
         showGrossRevenue={showGrossRevenue} 
       />
 

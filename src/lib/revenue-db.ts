@@ -769,6 +769,100 @@ export async function getDashboardSummary(
   };
 }
 
+/**
+ * Get revenue comparison between current and previous period
+ */
+export async function getRevenueComparison(
+  userId: string
+): Promise<{
+  current: {
+    grossRevenue: number;
+    netRevenue: number;
+    impressions: number;
+    clicks: number;
+  };
+  previous: {
+    grossRevenue: number;
+    netRevenue: number;
+    impressions: number;
+    clicks: number;
+  };
+  change: {
+    grossRevenue: { value: number; percent: number };
+    netRevenue: { value: number; percent: number };
+    impressions: { value: number; percent: number };
+    clicks: { value: number; percent: number };
+  };
+}> {
+  const now = new Date();
+
+  // Current month
+  const currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const currentEnd = now;
+
+  // Last month (same day range for fair comparison)
+  const dayOfMonth = now.getDate();
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth);
+
+  // Fetch both periods
+  const [currentData, previousData] = await Promise.all([
+    prisma.overview_Report.aggregate({
+      where: {
+        userId,
+        date: { gte: currentStart, lte: currentEnd },
+      },
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
+    prisma.overview_Report.aggregate({
+      where: {
+        userId,
+        date: { gte: lastMonthStart, lte: lastMonthEnd },
+      },
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
+  ]);
+
+  const current = {
+    grossRevenue: currentData._sum.grossRevenue || 0,
+    netRevenue: currentData._sum.netRevenue || 0,
+    impressions: currentData._sum.impressions || 0,
+    clicks: currentData._sum.clicks || 0,
+  };
+
+  const previous = {
+    grossRevenue: previousData._sum.grossRevenue || 0,
+    netRevenue: previousData._sum.netRevenue || 0,
+    impressions: previousData._sum.impressions || 0,
+    clicks: previousData._sum.clicks || 0,
+  };
+
+  // Calculate changes
+  const calcChange = (curr: number, prev: number) => ({
+    value: Math.round((curr - prev) * 100) / 100,
+    percent: prev > 0 ? Math.round(((curr - prev) / prev) * 10000) / 100 : curr > 0 ? 100 : 0,
+  });
+
+  const change = {
+    grossRevenue: calcChange(current.grossRevenue, previous.grossRevenue),
+    netRevenue: calcChange(current.netRevenue, previous.netRevenue),
+    impressions: calcChange(current.impressions, previous.impressions),
+    clicks: calcChange(current.clicks, previous.clicks),
+  };
+
+  return { current, previous, change };
+}
+
 // ============================================
 // YANDEX REVENUE FUNCTIONS
 // ============================================
