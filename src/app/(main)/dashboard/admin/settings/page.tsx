@@ -44,22 +44,27 @@ export default async function AdminSettingsPage() {
   const settings = await getSystemSettings();
 
   // Get record counts for data management display
-  const [sedoCount, yandexCount, overviewCount, domainCount] = await Promise.all([
+  const [sedoCount, yandexCount, overviewCount, domainCount, sedoAccountCount, yandexAccountCount] = await Promise.all([
     prisma.bidder_Sedo.count(),
     prisma.bidder_Yandex.count(),
     prisma.overview_Report.count(),
     prisma.domain_Assignment.count(),
+    prisma.networkAccount.count({ where: { network: "sedo", isActive: true } }),
+    prisma.networkAccount.count({ where: { network: "yandex", isActive: true } }),
   ]);
 
   // Get API connection status
+  // Check both: database accounts OR environment variables
   const apiStatus = {
     sedo: {
-      configured: sedoClient.isConfigured(),
+      configured: sedoAccountCount > 0 || sedoClient.isConfigured(),
       lastSync: settings.lastSedoSync,
+      accountCount: sedoAccountCount,
     },
     yandex: {
-      configured: yandexClient.isConfigured(),
+      configured: yandexAccountCount > 0 || yandexClient.isConfigured(),
       lastSync: settings.lastYandexSync,
+      accountCount: yandexAccountCount,
     },
   };
 

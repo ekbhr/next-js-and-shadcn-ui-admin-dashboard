@@ -16,6 +16,7 @@ import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 interface ApiStatus {
   configured: boolean;
   lastSync: Date | null;
+  accountCount?: number;
 }
 
 interface ApiConnectionsSectionProps {
@@ -122,7 +123,11 @@ export function ApiConnectionsSection({ apiStatus }: ApiConnectionsSectionProps)
                       <XCircle className="h-4 w-4 text-red-500" />
                     )}
                     <span className={status.configured ? "text-green-600" : "text-red-600"}>
-                      {status.configured ? "Connected" : "Not configured"}
+                      {status.configured 
+                        ? status.accountCount && status.accountCount > 0
+                          ? `${status.accountCount} account${status.accountCount > 1 ? "s" : ""} connected`
+                          : "Connected (env vars)"
+                        : "Not configured"}
                     </span>
                   </div>
 
