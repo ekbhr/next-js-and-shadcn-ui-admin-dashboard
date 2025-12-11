@@ -309,6 +309,9 @@ class YandexClient {
 
   /**
    * Fetch list of domains from Yandex
+   * 
+   * Uses entity_field=domain to group by domain
+   * API docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
    */
   async getDomains(): Promise<{
     success: boolean;
@@ -325,18 +328,15 @@ class YandexClient {
     }
 
     try {
-      // Get last 31 days grouped by domain
-      const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      console.log("[Yandex API] Fetching domains...");
 
+      // Use correct parameters per official docs
       const requestParams: Record<string, string | number | string[]> = {
-        date1: startDate,
-        date2: endDate,
-        group: "all", // Aggregate all
-        dimensions: "domain",
-        metrics: "shows,clicks,partner_wo_nds",
-        currency: "usd",
-        pretty: 0,
+        lang: "en",
+        period: "30days", // Last 30 days
+        field: ["shows", "clicks", "partner_wo_nds"], // Fields to include
+        entity_field: "domain", // Group by domain
+        currency: "USD",
       };
 
       const result = await this.makeApiRequest(requestParams);
@@ -345,7 +345,16 @@ class YandexClient {
         return { success: false, domains: [], error: result.error };
       }
 
-      const rows = (result.data.data as Array<Record<string, unknown>>) || [];
+      // Navigate to the correct data structure (data.points)
+      const data = result.data.data as Record<string, unknown> | undefined;
+      if (!data) {
+        console.warn("[Yandex API] No 'data' field in response");
+        return { success: true, domains: [] };
+      }
+
+      const points = (data.points as Array<Record<string, unknown>>) || [];
+      console.log(`[Yandex API] Processing ${points.length} domain points`);
+
       const domains: Array<{
         domain: string;
         revenue: number;
@@ -353,11 +362,12 @@ class YandexClient {
         clicks: number;
       }> = [];
 
-      for (const row of rows) {
-        const dimensions = row.dimensions as Record<string, unknown> || {};
-        const metrics = row.metrics as Record<string, number> || {};
+      for (const point of points) {
+        const dimensions = point.dimensions as Record<string, unknown> || {};
+        const measuresArray = point.measures as Array<Record<string, number>> || [];
+        const metrics = measuresArray[0] || {};
         
-        const domain = (dimensions.domain as string) || "";
+        const domain = typeof dimensions.domain === "string" ? dimensions.domain : "";
         if (!domain) continue;
 
         domains.push({
@@ -385,6 +395,9 @@ class YandexClient {
 
   /**
    * Fetch list of tags/adunits from Yandex
+   * 
+   * Uses entity_field to group by page_id (tag/adunit)
+   * API docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
    */
   async getTags(): Promise<{
     success: boolean;
@@ -403,17 +416,16 @@ class YandexClient {
     }
 
     try {
-      const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      console.log("[Yandex API] Fetching tags...");
 
+      // Use correct parameters per official docs
+      // entity_field can be: page_id, domain, block_id, etc.
       const requestParams: Record<string, string | number | string[]> = {
-        date1: startDate,
-        date2: endDate,
-        group: "all",
-        dimensions: "tag_id,tag_name,domain",
-        metrics: "shows,clicks,partner_wo_nds",
-        currency: "usd",
-        pretty: 0,
+        lang: "en",
+        period: "30days",
+        field: ["shows", "clicks", "partner_wo_nds"],
+        entity_field: ["page_id", "domain"], // Group by page (tag) and domain
+        currency: "USD",
       };
 
       const result = await this.makeApiRequest(requestParams);
@@ -422,7 +434,16 @@ class YandexClient {
         return { success: false, tags: [], error: result.error };
       }
 
-      const rows = (result.data.data as Array<Record<string, unknown>>) || [];
+      // Navigate to the correct data structure
+      const data = result.data.data as Record<string, unknown> | undefined;
+      if (!data) {
+        console.warn("[Yandex API] No 'data' field in response");
+        return { success: true, tags: [] };
+      }
+
+      const points = (data.points as Array<Record<string, unknown>>) || [];
+      console.log(`[Yandex API] Processing ${points.length} tag points`);
+
       const tags: Array<{
         tagId: string;
         tagName: string;
@@ -432,17 +453,19 @@ class YandexClient {
         clicks: number;
       }> = [];
 
-      for (const row of rows) {
-        const dimensions = row.dimensions as Record<string, unknown> || {};
-        const metrics = row.metrics as Record<string, number> || {};
+      for (const point of points) {
+        const dimensions = point.dimensions as Record<string, unknown> || {};
+        const measuresArray = point.measures as Array<Record<string, number>> || [];
+        const metrics = measuresArray[0] || {};
         
-        const tagId = (dimensions.tag_id as string) || "";
+        // page_id is the tag/adunit identifier in Yandex
+        const tagId = typeof dimensions.page_id === "string" ? dimensions.page_id : "";
         if (!tagId) continue;
 
         tags.push({
           tagId,
-          tagName: (dimensions.tag_name as string) || tagId,
-          domain: (dimensions.domain as string) || undefined,
+          tagName: typeof dimensions.page_name === "string" ? dimensions.page_name : tagId,
+          domain: typeof dimensions.domain === "string" ? dimensions.domain : undefined,
           revenue: metrics.partner_wo_nds || 0,
           impressions: metrics.shows || 0,
           clicks: metrics.clicks || 0,
