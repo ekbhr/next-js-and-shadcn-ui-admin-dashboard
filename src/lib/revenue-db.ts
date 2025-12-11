@@ -877,7 +877,7 @@ export async function getRevenueComparison(
 export async function saveYandexRevenue(
   data: YandexRevenueData[],
   fallbackUserId: string,
-  options: { saveToDomainOwner?: boolean; filterByAssignedDomains?: boolean } = {}
+  options: { saveToDomainOwner?: boolean; filterByAssignedDomains?: boolean; accountId?: string } = {}
 ): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
   let saved = 0;
   let updated = 0;
@@ -926,6 +926,7 @@ export async function saveYandexRevenue(
         rpm: item.rpm || null,
         tagName: item.tagName || null,
         status: "Estimated",
+        accountId: options.accountId || null,
       };
 
       // Find existing record
