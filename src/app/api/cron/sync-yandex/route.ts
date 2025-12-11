@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { yandexClient } from "@/lib/yandex";
 import { saveYandexRevenue, syncYandexToOverviewReport } from "@/lib/revenue-db";
+import { notifySyncFailure } from "@/lib/notifications";
 
 // Verify cron request is from Vercel
 function verifyCronRequest(request: Request): boolean {
@@ -79,10 +80,18 @@ export async function GET(request: Request) {
     const yandexDomains = await yandexClient.getDomains();
 
     if (!yandexData.success || !yandexData.data) {
-      console.error("[Yandex Cron] Failed to fetch data:", yandexData.error);
+      const errorMsg = yandexData.error || "Failed to fetch Yandex data";
+      console.error("[Yandex Cron] Failed to fetch data:", errorMsg);
+      
+      // Send failure notification
+      await notifySyncFailure("Yandex", errorMsg, {
+        timestamp: new Date(),
+        additionalInfo: "Cron job failed to fetch data from Yandex API",
+      });
+      
       return NextResponse.json({
         success: false,
-        error: yandexData.error || "Failed to fetch Yandex data",
+        error: errorMsg,
         duration: Date.now() - startTime,
       });
     }
@@ -127,10 +136,18 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[Yandex Cron] Error:", error);
+    
+    // Send failure notification
+    await notifySyncFailure("Yandex", errorMsg, {
+      timestamp: new Date(),
+      additionalInfo: "Unexpected error during cron sync",
+    });
+    
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMsg,
       duration: Date.now() - startTime,
     });
   }

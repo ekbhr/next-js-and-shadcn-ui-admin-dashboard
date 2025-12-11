@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sedoClient } from "@/lib/sedo";
 import { saveSedoRevenue, syncToOverviewReport } from "@/lib/revenue-db";
+import { notifySyncFailure } from "@/lib/notifications";
 
 // Verify cron request is from Vercel
 function verifyCronRequest(request: Request): boolean {
@@ -87,10 +88,18 @@ export async function GET(request: Request) {
     const sedoDomains = await sedoClient.getDomains();
 
     if (!sedoData.success || !sedoData.data) {
-      console.error("[Cron] Failed to fetch Sedo data:", sedoData.error);
+      const errorMsg = sedoData.error || "Failed to fetch Sedo data";
+      console.error("[Cron] Failed to fetch Sedo data:", errorMsg);
+      
+      // Send failure notification
+      await notifySyncFailure("Sedo", errorMsg, {
+        timestamp: new Date(),
+        additionalInfo: "Cron job failed to fetch data from Sedo API",
+      });
+      
       return NextResponse.json({
         success: false,
-        error: sedoData.error || "Failed to fetch Sedo data",
+        error: errorMsg,
         duration: Date.now() - startTime,
       });
     }
@@ -137,10 +146,18 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[Cron] Error:", error);
+    
+    // Send failure notification
+    await notifySyncFailure("Sedo", errorMsg, {
+      timestamp: new Date(),
+      additionalInfo: "Unexpected error during cron sync",
+    });
+    
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMsg,
       duration: Date.now() - startTime,
     });
   }
