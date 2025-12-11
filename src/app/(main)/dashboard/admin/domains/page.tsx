@@ -13,7 +13,6 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { DomainTable } from "./_components/domain-table";
-import { SyncButton } from "./_components/sync-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Domain Management",
@@ -75,14 +74,11 @@ export default async function DomainsPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Domain Assignment</h1>
-          <p className="text-muted-foreground">
-            Assign domains to users and set revenue share percentages
-          </p>
-        </div>
-        <SyncButton />
+      <div>
+        <h1 className="text-2xl font-bold">Domain Assignment</h1>
+        <p className="text-muted-foreground">
+          Assign domains to users and set revenue share percentages
+        </p>
       </div>
 
       {/* Domain Table */}

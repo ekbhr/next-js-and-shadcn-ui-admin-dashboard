@@ -12,8 +12,6 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { AdminReportTable } from "./_components/admin-report-table";
 import { AdminReportSummary } from "./_components/admin-report-summary";
-import { CleanupButton } from "./_components/cleanup-button";
-import { SyncDataButton } from "./_components/sync-data-button";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Admin Report",
@@ -145,17 +143,11 @@ export default async function AdminReportPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Admin Report</h1>
-          <p className="text-muted-foreground">
-            Revenue overview across all users (last 31 days)
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <SyncDataButton />
-          <CleanupButton />
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Admin Report</h1>
+        <p className="text-muted-foreground">
+          Revenue overview across all users (last 31 days)
+        </p>
       </div>
 
       {/* Summary Cards */}

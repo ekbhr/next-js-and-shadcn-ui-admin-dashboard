@@ -277,3 +277,29 @@ model PaymentDetails {
   
   @@index([userId])
 }
+
+// ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+// System-wide configuration (singleton - only one record)
+model SystemSettings {
+  id                    String   @id @default("system") // Singleton pattern
+  
+  // Revenue Configuration
+  defaultRevShare       Float    @default(80) // Default percentage for new domains
+  
+  // Email Notifications
+  emailOnSyncFailure    Boolean  @default(true)
+  emailWeeklySummary    Boolean  @default(false)
+  adminEmail            String?  // Override admin email for notifications
+  
+  // Sync Configuration
+  lastSedoSync          DateTime?
+  lastYandexSync        DateTime?
+  lastDomainSync        DateTime?
+  
+  // Timestamps
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}

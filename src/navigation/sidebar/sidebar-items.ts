@@ -96,11 +96,17 @@ export const sidebarItems: NavGroup[] = [
         icon: Network,
         adminOnly: true,
       },
+    ],
+  },
+  {
+    id: 4,
+    label: "System",
+    adminOnly: true,
+    items: [
       {
         title: "Settings",
         url: "/dashboard/admin/settings",
         icon: Settings,
-        comingSoon: true,
         adminOnly: true,
       },
     ],

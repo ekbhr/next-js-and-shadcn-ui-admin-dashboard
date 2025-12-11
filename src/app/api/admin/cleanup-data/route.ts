@@ -32,25 +32,70 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    // Parse request body for type-specific deletion
+    let type: "sedo" | "yandex" | "all" = "all";
+    let userId: string | null = null;
+
+    try {
+      const body = await request.json();
+      type = body.type || "all";
+      userId = body.userId || null;
+    } catch {
+      // No body provided, use defaults (all)
+      const { searchParams } = new URL(request.url);
+      userId = searchParams.get("userId");
+    }
 
     if (userId) {
       // Delete data for specific user
-      const [sedoDeleted, yandexDeleted, overviewDeleted] = await Promise.all([
-        prisma.bidder_Sedo.deleteMany({ where: { userId } }),
-        prisma.bidder_Yandex.deleteMany({ where: { userId } }),
-        prisma.overview_Report.deleteMany({ where: { userId } }),
-      ]);
+      const results: { sedo?: number; yandex?: number; overview?: number } = {};
+
+      if (type === "sedo" || type === "all") {
+        const sedoDeleted = await prisma.bidder_Sedo.deleteMany({ where: { userId } });
+        results.sedo = sedoDeleted.count;
+      }
+      if (type === "yandex" || type === "all") {
+        const yandexDeleted = await prisma.bidder_Yandex.deleteMany({ where: { userId } });
+        results.yandex = yandexDeleted.count;
+      }
+      if (type === "all") {
+        const overviewDeleted = await prisma.overview_Report.deleteMany({ where: { userId } });
+        results.overview = overviewDeleted.count;
+      }
 
       return NextResponse.json({
         success: true,
-        message: `Deleted data for user ${userId}`,
-        deleted: {
-          bidderSedo: sedoDeleted.count,
-          bidderYandex: yandexDeleted.count,
-          overviewReport: overviewDeleted.count,
-        },
+        message: `Deleted ${type} data for user ${userId}`,
+        deleted: results,
+      });
+    }
+
+    // Delete based on type
+    const results: { sedo?: number; yandex?: number; overview?: number } = {};
+
+    if (type === "sedo") {
+      const sedoDeleted = await prisma.bidder_Sedo.deleteMany({});
+      const overviewDeleted = await prisma.overview_Report.deleteMany({ where: { network: "sedo" } });
+      results.sedo = sedoDeleted.count;
+      results.overview = overviewDeleted.count;
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ${results.sedo} Sedo records and ${results.overview} overview records`,
+        deleted: results,
+      });
+    }
+
+    if (type === "yandex") {
+      const yandexDeleted = await prisma.bidder_Yandex.deleteMany({});
+      const overviewDeleted = await prisma.overview_Report.deleteMany({ where: { network: "yandex" } });
+      results.yandex = yandexDeleted.count;
+      results.overview = overviewDeleted.count;
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ${results.yandex} Yandex records and ${results.overview} overview records`,
+        deleted: results,
       });
     }
 
