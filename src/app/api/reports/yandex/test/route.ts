@@ -27,12 +27,15 @@ async function testYandexApi() {
       });
     }
 
-    // Test API connection - fetch today's stats
+    // Test API connection - fetch last 7 days
     const today = new Date();
     const startDate = new Date(today);
     startDate.setDate(today.getDate() - 7); // Last 7 days for quick test
 
-    const result = await yandexClient.getRevenueData(startDate, today);
+    const result = await yandexClient.getRevenueData({
+      startDate: startDate.toISOString().split("T")[0],
+      endDate: today.toISOString().split("T")[0],
+    });
 
     return NextResponse.json({
       success: result.success,
