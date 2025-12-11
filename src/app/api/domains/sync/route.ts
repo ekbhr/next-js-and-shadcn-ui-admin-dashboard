@@ -5,13 +5,17 @@
  * 
  * Fetches domains from ALL configured networks (Sedo, Yandex) and syncs them to Domain_Assignment table.
  * Creates new assignments with default revShare for new domains.
+ * 
+ * Uses the centralized domains.ts library for orchestration.
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { sedoClient } from "@/lib/sedo";
-import { yandexClient } from "@/lib/yandex";
-import { syncDomainsToAssignment, getDomainAssignments } from "@/lib/revenue-db";
+import {
+  syncAllNetworkDomains,
+  getAllDomainAssignments,
+  getNetworkStatus,
+} from "@/lib/domains";
 
 export async function POST() {
   try {
@@ -24,87 +28,49 @@ export async function POST() {
       );
     }
 
-    const userId = session.user.id;
     console.log(`[Domain Sync] Starting for user: ${session.user.email}`);
 
-    const results = {
-      sedo: { fetched: 0, created: 0, existing: 0, errors: 0 },
-      yandex: { fetched: 0, created: 0, existing: 0, errors: 0 },
-    };
+    // Get network status
+    const networkStatus = getNetworkStatus();
+    console.log(`[Domain Sync] Network status:`, networkStatus);
 
-    // Fetch and sync Sedo domains
-    if (sedoClient.isConfigured()) {
-      console.log(`[Domain Sync] Fetching Sedo domains...`);
-      const sedoDomains = await sedoClient.getDomains();
+    // Sync domains from all networks using centralized library
+    const syncResult = await syncAllNetworkDomains(80); // Default 80% revShare
 
-      if (sedoDomains.success && sedoDomains.domains.length > 0) {
-        console.log(`[Domain Sync] Fetched ${sedoDomains.domains.length} domains from Sedo`);
-        const sedoResult = await syncDomainsToAssignment(
-          userId,
-          sedoDomains.domains,
-          "sedo",
-          80
-        );
-        results.sedo = {
-          fetched: sedoDomains.domains.length,
-          created: sedoResult.created,
-          existing: sedoResult.existing,
-          errors: sedoResult.errors.length,
-        };
-      }
-    } else {
-      console.log(`[Domain Sync] Sedo not configured, skipping`);
+    // Build results by network
+    const networks: Record<string, { fetched: number; created: number; existing: number; errors: number }> = {};
+    for (const result of syncResult.results) {
+      networks[result.network] = {
+        fetched: result.fetched,
+        created: result.created,
+        existing: result.existing,
+        errors: result.errors.length,
+      };
     }
 
-    // Fetch and sync Yandex domains
-    if (yandexClient.isConfigured()) {
-      console.log(`[Domain Sync] Fetching Yandex domains...`);
-      const yandexDomains = await yandexClient.getDomains();
-
-      if (yandexDomains.success && yandexDomains.domains.length > 0) {
-        console.log(`[Domain Sync] Fetched ${yandexDomains.domains.length} domains from Yandex`);
-        const yandexResult = await syncDomainsToAssignment(
-          userId,
-          yandexDomains.domains,
-          "yandex",
-          80
-        );
-        results.yandex = {
-          fetched: yandexDomains.domains.length,
-          created: yandexResult.created,
-          existing: yandexResult.existing,
-          errors: yandexResult.errors.length,
-        };
-      }
-    } else {
-      console.log(`[Domain Sync] Yandex not configured, skipping`);
-    }
-
-    // Get updated assignments
-    const assignments = await getDomainAssignments(userId);
-
-    // Calculate totals
-    const totalFetched = results.sedo.fetched + results.yandex.fetched;
-    const totalCreated = results.sedo.created + results.yandex.created;
-    const totalExisting = results.sedo.existing + results.yandex.existing;
-    const totalErrors = results.sedo.errors + results.yandex.errors;
+    // Get updated assignments (include unassigned for admin view)
+    const assignments = await getAllDomainAssignments({ includeUnassigned: true });
 
     return NextResponse.json({
-      success: true,
-      message: "Domains synced successfully",
+      success: syncResult.success,
+      message: syncResult.success ? "Domains synced successfully" : "Sync completed with errors",
       sync: {
-        fetched: totalFetched,
-        created: totalCreated,
-        existing: totalExisting,
-        errors: totalErrors,
+        fetched: syncResult.totalFetched,
+        created: syncResult.totalCreated,
+        existing: syncResult.totalExisting,
+        errors: syncResult.totalErrors,
       },
-      networks: results,
+      networks,
+      networkStatus,
       assignments: assignments.map((a) => ({
         id: a.id,
         domain: a.domain,
         network: a.network,
         revShare: a.revShare,
         isActive: a.isActive,
+        userId: a.userId,
+        userName: a.userName,
+        userEmail: a.userEmail,
       })),
     });
   } catch (error) {
@@ -122,7 +88,7 @@ export async function POST() {
 /**
  * GET /api/domains/sync
  * 
- * Returns current domain assignments for the user
+ * Returns current domain assignments and network status
  */
 export async function GET() {
   try {
@@ -134,17 +100,24 @@ export async function GET() {
       );
     }
 
-    const assignments = await getDomainAssignments(session.user.id);
+    // Get network status
+    const networkStatus = getNetworkStatus();
+
+    // Get assignments (include unassigned for admin view)
+    const assignments = await getAllDomainAssignments({ includeUnassigned: true });
 
     return NextResponse.json({
       success: true,
+      networkStatus,
       assignments: assignments.map((a) => ({
         id: a.id,
         domain: a.domain,
         network: a.network,
         revShare: a.revShare,
         isActive: a.isActive,
-        notes: a.notes,
+        userId: a.userId,
+        userName: a.userName,
+        userEmail: a.userEmail,
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
       })),
