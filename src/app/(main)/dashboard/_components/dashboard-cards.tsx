@@ -9,6 +9,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign, TrendingUp, TrendingDown, Eye, MousePointer, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface NetworkData {
   network: string;
@@ -39,13 +40,7 @@ interface DashboardCardsProps {
   showGrossRevenue?: boolean; // Only true for admin users
 }
 
-// Network display config
-const networkConfig: Record<string, { label: string; color: string }> = {
-  sedo: { label: "Sedo", color: "bg-blue-100 text-blue-800" },
-  yandex: { label: "Yandex", color: "bg-orange-100 text-orange-800" },
-  google: { label: "Google", color: "bg-green-100 text-green-800" },
-  unknown: { label: "Other", color: "bg-gray-100 text-gray-800" },
-};
+// Network display config - now uses centralized ad-networks.ts
 
 // Change indicator component
 function ChangeIndicator({ percent, value, prefix = "" }: { percent: number; value?: number; prefix?: string }) {
@@ -77,13 +72,13 @@ function ChangeIndicator({ percent, value, prefix = "" }: { percent: number; val
 }
 
 export function DashboardCards({ totals, byNetwork = [], comparison, showGrossRevenue = false }: DashboardCardsProps) {
-  // Format network breakdown for display
+  // Format network breakdown for display - uses centralized ad-networks.ts
   const networkBreakdown = byNetwork.map((n) => {
-    const config = networkConfig[n.network] || networkConfig.unknown;
+    const colors = getNetworkColors(n.network);
     return {
       ...n,
-      label: config.label,
-      badgeClass: config.color,
+      label: getNetworkName(n.network, true), // short name
+      badgeClass: colors.badge,
     };
   }).sort((a, b) => b.netRevenue - a.netRevenue);
 

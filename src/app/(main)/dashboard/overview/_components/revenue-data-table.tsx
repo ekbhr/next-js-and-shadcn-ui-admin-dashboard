@@ -55,6 +55,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
+import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface RevenueRecord {
   id: string;
@@ -74,19 +75,7 @@ interface RevenueDataTableProps {
   showGrossRevenue?: boolean;
 }
 
-// Network badge color
-const getNetworkColor = (network: string) => {
-  switch (network.toLowerCase()) {
-    case "sedo":
-      return "bg-blue-500 hover:bg-blue-600";
-    case "yandex":
-      return "bg-red-500 hover:bg-red-600";
-    case "google":
-      return "bg-green-500 hover:bg-green-600";
-    default:
-      return "bg-gray-500 hover:bg-gray-600";
-  }
-};
+// Network colors now come from centralized ad-networks.ts
 
 // Create columns dynamically based on showGrossRevenue
 const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] => {
@@ -124,8 +113,8 @@ const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] =>
         </Button>
       ),
       cell: ({ row }) => (
-        <Badge className={getNetworkColor(row.original.network)}>
-          {row.original.network.toUpperCase()}
+        <Badge className={getNetworkColors(row.original.network).badge}>
+          {getNetworkName(row.original.network, true)}
         </Badge>
       ),
       filterFn: (row, id, value) => {

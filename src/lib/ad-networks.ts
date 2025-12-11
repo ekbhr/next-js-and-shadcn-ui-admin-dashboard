@@ -32,7 +32,8 @@ export interface NetworkColors {
   text: string;          // Text color class
   bg: string;            // Background color class
   border: string;        // Border color class
-  badge: string;         // Badge combination class
+  badge: string;         // Badge combination class (solid style)
+  outlineBadge: string;  // Badge for outline variant
 }
 
 export interface NetworkApi {
@@ -89,7 +90,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-blue-700",
       bg: "bg-blue-50",
       border: "border-blue-200",
-      badge: "bg-blue-100 text-blue-800 border-blue-200",
+      badge: "bg-blue-100 text-blue-800 hover:bg-blue-200",
+      outlineBadge: "bg-blue-50 text-blue-700 border-blue-200",
     },
     features: {
       revenue: true,
@@ -120,7 +122,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-orange-700",
       bg: "bg-orange-50",
       border: "border-orange-200",
-      badge: "bg-orange-100 text-orange-800 border-orange-200",
+      badge: "bg-orange-100 text-orange-800 hover:bg-orange-200",
+      outlineBadge: "bg-orange-50 text-orange-700 border-orange-200",
     },
     features: {
       revenue: true,
@@ -155,7 +158,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-green-700",
       bg: "bg-green-50",
       border: "border-green-200",
-      badge: "bg-green-100 text-green-800 border-green-200",
+      badge: "bg-green-100 text-green-800 hover:bg-green-200",
+      outlineBadge: "bg-green-50 text-green-700 border-green-200",
     },
     features: {
       revenue: true,
@@ -186,7 +190,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-indigo-700",
       bg: "bg-indigo-50",
       border: "border-indigo-200",
-      badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
+      badge: "bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
+      outlineBadge: "bg-indigo-50 text-indigo-700 border-indigo-200",
     },
     features: {
       revenue: true,
@@ -217,7 +222,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-amber-700",
       bg: "bg-amber-50",
       border: "border-amber-200",
-      badge: "bg-amber-100 text-amber-800 border-amber-200",
+      badge: "bg-amber-100 text-amber-800 hover:bg-amber-200",
+      outlineBadge: "bg-amber-50 text-amber-700 border-amber-200",
     },
     features: {
       revenue: true,
@@ -248,7 +254,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-cyan-700",
       bg: "bg-cyan-50",
       border: "border-cyan-200",
-      badge: "bg-cyan-100 text-cyan-800 border-cyan-200",
+      badge: "bg-cyan-100 text-cyan-800 hover:bg-cyan-200",
+      outlineBadge: "bg-cyan-50 text-cyan-700 border-cyan-200",
     },
     features: {
       revenue: true,
@@ -279,7 +286,8 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
       text: "text-violet-700",
       bg: "bg-violet-50",
       border: "border-violet-200",
-      badge: "bg-violet-100 text-violet-800 border-violet-200",
+      badge: "bg-violet-100 text-violet-800 hover:bg-violet-200",
+      outlineBadge: "bg-violet-50 text-violet-700 border-violet-200",
     },
     features: {
       revenue: true,
@@ -366,7 +374,8 @@ export function getNetworkColors(networkId: string): NetworkColors {
       text: "text-gray-700",
       bg: "bg-gray-50",
       border: "border-gray-200",
-      badge: "bg-gray-100 text-gray-800 border-gray-200",
+      badge: "bg-gray-100 text-gray-800 hover:bg-gray-200",
+      outlineBadge: "bg-gray-50 text-gray-700 border-gray-200",
     }
   );
 }

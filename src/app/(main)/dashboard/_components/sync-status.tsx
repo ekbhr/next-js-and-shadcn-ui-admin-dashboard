@@ -7,6 +7,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Database, CheckCircle, AlertCircle } from "lucide-react";
+import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface SyncStatusProps {
   lastSync: {
@@ -74,8 +75,8 @@ export function SyncStatus({ lastSync, recordCounts }: SyncStatusProps) {
           {/* Network breakdown */}
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                Sedo
+              <Badge variant="outline" className={getNetworkColors("sedo").outlineBadge}>
+                {getNetworkName("sedo", true)}
               </Badge>
               <span className="text-muted-foreground">
                 {recordCounts.sedo.toLocaleString()} records
@@ -85,8 +86,8 @@ export function SyncStatus({ lastSync, recordCounts }: SyncStatusProps) {
             </div>
 
             <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                Yandex
+              <Badge variant="outline" className={getNetworkColors("yandex").outlineBadge}>
+                {getNetworkName("yandex", true)}
               </Badge>
               <span className="text-muted-foreground">
                 {recordCounts.yandex.toLocaleString()} records

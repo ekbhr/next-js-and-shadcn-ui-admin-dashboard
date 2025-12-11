@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Pencil, Check, X, Loader2, User, Users, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface DomainAssignment {
   id: string;
@@ -187,18 +188,7 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
     }
   };
 
-  const getNetworkColor = (network: string | null) => {
-    switch (network?.toLowerCase()) {
-      case "sedo":
-        return "bg-blue-500";
-      case "yandex":
-        return "bg-red-500";
-      case "google":
-        return "bg-green-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
+  // Network colors now come from centralized ad-networks.ts
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("en-US", {
@@ -342,8 +332,8 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                   {assignment.domain}
                 </TableCell>
                 <TableCell>
-                  <Badge className={getNetworkColor(assignment.network)}>
-                    {assignment.network.toUpperCase()}
+                  <Badge className={getNetworkColors(assignment.network).badge}>
+                    {getNetworkName(assignment.network, true)}
                   </Badge>
                 </TableCell>
                 <TableCell>
