@@ -291,7 +291,6 @@ export async function getAllDomainOwners(
     where: {
       network: network,
       isActive: true,
-      userId: { not: null },
     },
     select: {
       domain: true,
@@ -421,7 +420,7 @@ export async function unassignDomain(
 export async function getAllDomainAssignments(options?: {
   network?: string;
   userId?: string;
-  includeUnassigned?: boolean;
+  includeUnassigned?: boolean; // Kept for backwards compatibility, but all domains now have userId
 }): Promise<
   Array<{
     id: string;
@@ -429,7 +428,7 @@ export async function getAllDomainAssignments(options?: {
     network: string;
     revShare: number;
     isActive: boolean;
-    userId: string | null;
+    userId: string;
     userName: string | null;
     userEmail: string | null;
     createdAt: Date;
@@ -438,7 +437,7 @@ export async function getAllDomainAssignments(options?: {
 > {
   const where: {
     network?: string;
-    userId?: string | { not: null } | null;
+    userId?: string;
   } = {};
 
   if (options?.network) {
@@ -447,10 +446,8 @@ export async function getAllDomainAssignments(options?: {
 
   if (options?.userId) {
     where.userId = options.userId;
-  } else if (!options?.includeUnassigned) {
-    // By default, only show assigned domains
-    where.userId = { not: null };
   }
+  // Note: includeUnassigned is ignored since userId is now required in schema
 
   const assignments = await prisma.domain_Assignment.findMany({
     where,
