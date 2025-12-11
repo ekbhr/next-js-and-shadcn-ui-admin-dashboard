@@ -385,7 +385,24 @@ export async function assignDomainToUser(
 }
 
 /**
- * Unassign a domain from a user (set userId to null)
+ * Super admin email - used as fallback owner for unassigned domains
+ */
+const SUPER_ADMIN_EMAIL = "shahfaisal106@gmail.com";
+
+/**
+ * Get super admin user ID
+ */
+async function getSuperAdminId(): Promise<string | null> {
+  const superAdmin = await prisma.user.findFirst({
+    where: { email: SUPER_ADMIN_EMAIL },
+    select: { id: true },
+  });
+  return superAdmin?.id || null;
+}
+
+/**
+ * Unassign a domain from a user (reassigns to super admin)
+ * Since userId is required in the schema, we reassign to super admin instead of null
  */
 export async function unassignDomain(
   domain: string,
@@ -394,13 +411,22 @@ export async function unassignDomain(
   try {
     const normalizedDomain = domain.toLowerCase().trim();
 
+    // Get super admin ID
+    const superAdminId = await getSuperAdminId();
+    if (!superAdminId) {
+      return {
+        success: false,
+        error: `Super admin (${SUPER_ADMIN_EMAIL}) not found`,
+      };
+    }
+
     await prisma.domain_Assignment.updateMany({
       where: {
         domain: normalizedDomain,
         network: network,
       },
       data: {
-        userId: null,
+        userId: superAdminId,
         updatedAt: new Date(),
       },
     });
