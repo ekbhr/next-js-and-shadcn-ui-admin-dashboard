@@ -40,7 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, Key, Trash2, Star, Edit, Eye, EyeOff } from "lucide-react";
+import { Loader2, Plus, Key, Trash2, Star, Eye, EyeOff, Link } from "lucide-react";
 import { toast } from "sonner";
 import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
@@ -231,6 +231,31 @@ export function NetworkAccountsSection() {
     } catch (error) {
       console.error("Error updating account:", error);
       toast.error("Failed to update account");
+    }
+  };
+
+  const handleLinkDomains = async (account: NetworkAccount) => {
+    try {
+      const response = await fetch("/api/admin/network-accounts/link-domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: account.id,
+          network: account.network,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(data.message);
+        loadAccounts();
+      } else {
+        toast.error(data.error || "Failed to link domains");
+      }
+    } catch (error) {
+      console.error("Error linking domains:", error);
+      toast.error("Failed to link domains");
     }
   };
 
@@ -432,6 +457,7 @@ export function NetworkAccountsSection() {
                       account={account}
                       onToggleActive={() => handleToggleActive(account)}
                       onSetDefault={() => handleSetDefault(account)}
+                      onLinkDomains={() => handleLinkDomains(account)}
                       onDelete={() => handleDelete(account.id)}
                     />
                   ))}
@@ -455,6 +481,7 @@ export function NetworkAccountsSection() {
                       account={account}
                       onToggleActive={() => handleToggleActive(account)}
                       onSetDefault={() => handleSetDefault(account)}
+                      onLinkDomains={() => handleLinkDomains(account)}
                       onDelete={() => handleDelete(account.id)}
                     />
                   ))}
@@ -473,11 +500,13 @@ function AccountRow({
   account,
   onToggleActive,
   onSetDefault,
+  onLinkDomains,
   onDelete,
 }: {
   account: NetworkAccount;
   onToggleActive: () => void;
   onSetDefault: () => void;
+  onLinkDomains: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -505,6 +534,19 @@ function AccountRow({
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Link Domains Button - only show if 0 domains assigned */}
+        {account.domainCount === 0 && account.isActive && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLinkDomains}
+            title="Link existing domains to this account"
+          >
+            <Link className="h-4 w-4 mr-1" />
+            Link Domains
+          </Button>
+        )}
+
         <Switch
           checked={account.isActive}
           onCheckedChange={onToggleActive}
