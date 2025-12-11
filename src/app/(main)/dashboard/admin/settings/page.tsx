@@ -19,6 +19,7 @@ import { sedoClient } from "@/lib/sedo";
 import { yandexClient } from "@/lib/yandex";
 
 import { RevenueConfigSection } from "./_components/revenue-config-section";
+import { NetworkAccountsSection } from "./_components/network-accounts-section";
 import { ApiConnectionsSection } from "./_components/api-connections-section";
 import { SyncScheduleSection } from "./_components/sync-schedule-section";
 import { DataManagementSection } from "./_components/data-management-section";
@@ -75,6 +76,9 @@ export default async function AdminSettingsPage() {
       <div className="grid gap-6">
         {/* Revenue Configuration */}
         <RevenueConfigSection defaultRevShare={settings.defaultRevShare} />
+
+        {/* Network Accounts (Multi-Account Support) */}
+        <NetworkAccountsSection />
 
         {/* API Connections */}
         <ApiConnectionsSection apiStatus={apiStatus} />

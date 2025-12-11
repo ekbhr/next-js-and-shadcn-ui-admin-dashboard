@@ -5,9 +5,23 @@
  * API Documentation: https://yandex.ru/dev/partner-statistics/doc/en/
  *
  * Authentication: OAuth token
+ * 
+ * Supports multi-account via factory pattern:
+ * - createYandexClient(credentials) - creates client with specific credentials
+ * - yandexClient - singleton using env vars (backward compatible)
  */
 
 import axios from "axios";
+import type { YandexCredentials } from "@/lib/encryption";
+
+// ============================================
+// Types
+// ============================================
+
+export interface YandexClientConfig {
+  oauthToken: string;
+  apiUrl?: string;
+}
 
 export interface YandexReportParams {
   startDate?: string; // YYYY-MM-DD
@@ -43,11 +57,27 @@ export interface YandexReportResponse {
 class YandexClient {
   private apiToken?: string;
   private apiUrl: string;
+  
+  // Multi-account support
+  public readonly accountId?: string;
+  public readonly accountName?: string;
 
-  constructor() {
-    this.apiToken = process.env.YANDEX_API;
-    // Correct URL per official docs: https://yandex.ru/dev/partner-statistics/doc/en/reference/statistics-get2
-    this.apiUrl = "https://partner.yandex.ru/api/statistics2/get.json";
+  /**
+   * Create a Yandex client.
+   * @param config - Optional config. If not provided, uses environment variables.
+   */
+  constructor(config?: YandexClientConfig & { accountId?: string; accountName?: string }) {
+    if (config) {
+      // Use provided config (multi-account mode)
+      this.apiToken = config.oauthToken;
+      this.apiUrl = config.apiUrl || "https://partner.yandex.ru/api/statistics2/get.json";
+      this.accountId = config.accountId;
+      this.accountName = config.accountName;
+    } else {
+      // Fall back to environment variables (backward compatible)
+      this.apiToken = process.env.YANDEX_API;
+      this.apiUrl = "https://partner.yandex.ru/api/statistics2/get.json";
+    }
   }
 
   /**
@@ -541,6 +571,32 @@ class YandexClient {
   }
 }
 
-// Export singleton instance
+// ============================================
+// Factory & Exports
+// ============================================
+
+/**
+ * Create a Yandex client with specific credentials (for multi-account support).
+ * 
+ * @example
+ * const client = createYandexClient({
+ *   oauthToken: "y0_abc123...",
+ * });
+ */
+export function createYandexClient(
+  credentials: YandexCredentials,
+  options?: { accountId?: string; accountName?: string }
+): YandexClient {
+  return new YandexClient({
+    oauthToken: credentials.oauthToken,
+    accountId: options?.accountId,
+    accountName: options?.accountName,
+  });
+}
+
+// Export singleton instance (uses environment variables - backward compatible)
 export const yandexClient = new YandexClient();
+
+// Export the class for typing
+export { YandexClient };
 

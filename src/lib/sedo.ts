@@ -9,9 +9,26 @@
  * - SignKey: API authentication key
  * - Username: Sedo account username
  * - Password: Sedo account password
+ * 
+ * Supports multi-account via factory pattern:
+ * - createSedoClient(credentials) - creates client with specific credentials
+ * - sedoClient - singleton using env vars (backward compatible)
  */
 
 import axios from "axios";
+import type { SedoCredentials } from "@/lib/encryption";
+
+// ============================================
+// Types
+// ============================================
+
+export interface SedoClientConfig {
+  partnerId: string;
+  signKey: string;
+  username: string;
+  password: string;
+  apiUrl?: string;
+}
 
 export interface SedoReportParams {
   startDate?: string; // YYYY-MM-DD
@@ -54,14 +71,33 @@ class SedoClient {
   private username?: string;
   private password?: string;
   private apiUrl: string;
+  
+  // Multi-account support
+  public readonly accountId?: string;
+  public readonly accountName?: string;
 
-  constructor() {
-    // Load from environment variables
-    this.signKey = process.env.SEDO_SIGN_KEY;
-    this.partnerId = process.env.SEDO_PARTNER_ID;
-    this.username = process.env.SEDO_USERNAME;
-    this.password = process.env.SEDO_PASSWORD;
-    this.apiUrl = process.env.SEDO_API_URL || "https://api.sedo.com/api/v1";
+  /**
+   * Create a Sedo client.
+   * @param config - Optional config. If not provided, uses environment variables.
+   */
+  constructor(config?: SedoClientConfig & { accountId?: string; accountName?: string }) {
+    if (config) {
+      // Use provided config (multi-account mode)
+      this.signKey = config.signKey;
+      this.partnerId = config.partnerId;
+      this.username = config.username;
+      this.password = config.password;
+      this.apiUrl = config.apiUrl || "https://api.sedo.com/api/v1";
+      this.accountId = config.accountId;
+      this.accountName = config.accountName;
+    } else {
+      // Fall back to environment variables (backward compatible)
+      this.signKey = process.env.SEDO_SIGN_KEY;
+      this.partnerId = process.env.SEDO_PARTNER_ID;
+      this.username = process.env.SEDO_USERNAME;
+      this.password = process.env.SEDO_PASSWORD;
+      this.apiUrl = process.env.SEDO_API_URL || "https://api.sedo.com/api/v1";
+    }
   }
 
   /**
@@ -628,5 +664,37 @@ class SedoClient {
   }
 }
 
-// Export singleton instance
+// ============================================
+// Factory & Exports
+// ============================================
+
+/**
+ * Create a Sedo client with specific credentials (for multi-account support).
+ * 
+ * @example
+ * const client = createSedoClient({
+ *   partnerId: "12345",
+ *   signKey: "abc123",
+ *   username: "user@example.com",
+ *   password: "secret",
+ * });
+ */
+export function createSedoClient(
+  credentials: SedoCredentials,
+  options?: { accountId?: string; accountName?: string }
+): SedoClient {
+  return new SedoClient({
+    partnerId: credentials.partnerId,
+    signKey: credentials.signKey,
+    username: credentials.username,
+    password: credentials.password,
+    accountId: options?.accountId,
+    accountName: options?.accountName,
+  });
+}
+
+// Export singleton instance (uses environment variables - backward compatible)
 export const sedoClient = new SedoClient();
+
+// Export the class for typing
+export { SedoClient };

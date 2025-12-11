@@ -51,11 +51,12 @@ export function calculateNetRevenue(grossRevenue: number, revShare: number): num
  * @param options - Optional settings
  * @param options.filterByAssignedDomains - If true, only saves data for domains assigned to specific users
  * @param options.saveToDomainOwner - If true, saves data to the user who owns the domain (default: true)
+ * @param options.accountId - Network account ID for multi-account support
  */
 export async function saveSedoRevenue(
   data: SedoRevenueData[],
   fallbackUserId: string,
-  options: { filterByAssignedDomains?: boolean; saveToDomainOwner?: boolean } = {}
+  options: { filterByAssignedDomains?: boolean; saveToDomainOwner?: boolean; accountId?: string } = {}
 ): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
   let saved = 0;
   let updated = 0;
@@ -110,6 +111,7 @@ export async function saveSedoRevenue(
         ctr: item.ctr || null,
         rpm: item.rpm || null,
         status: "Estimated",
+        accountId: options.accountId || null,
       };
 
       // Find existing record manually (check both for this user and if domain already exists for another user)

@@ -87,6 +87,41 @@ model VerificationToken {
 }
 
 // ============================================
+// NETWORK ACCOUNTS (Multi-Account Support)
+// ============================================
+
+// Network account credentials (e.g., multiple Sedo accounts)
+model NetworkAccount {
+  id            String   @id @default(cuid())
+  
+  // Account identification
+  network       String   // "sedo", "yandex"
+  name          String   // Display name: "Sedo Account 1", "Client XYZ"
+  
+  // Encrypted credentials (JSON string, encrypted at rest)
+  // Sedo: { partnerId, signKey, username, password }
+  // Yandex: { oauthToken }
+  credentials   String   @db.Text
+  
+  // Status
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false) // Default account for new domains
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  domains       Domain_Assignment[]
+  sedoRevenue   Bidder_Sedo[]
+  yandexRevenue Bidder_Yandex[]
+  
+  @@unique([network, name])
+  @@index([network])
+  @@index([isActive])
+}
+
+// ============================================
 // REVENUE DATA TABLES
 // ============================================
 
@@ -127,11 +162,16 @@ model Bidder_Sedo {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  // Multi-account support
+  accountId     String?
+  account       NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
   // Unique constraint for upsert (prevents duplicates)
   @@unique([date, domain, c1, c2, c3, userId])
   @@index([date])
   @@index([userId])
   @@index([domain])
+  @@index([accountId])
 }
 
 // Domain assignment & RevShare configuration
@@ -143,6 +183,10 @@ model Domain_Assignment {
   userId        String   // The user who owns this domain
   domain        String   // Domain name (required, no null)
   network       String   @default("sedo") // Network source
+  
+  // Multi-account support
+  accountId     String?  // Links to NetworkAccount
+  account       NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   
   // RevShare
   revShare      Float    // Partner's percentage (0-100)
@@ -163,6 +207,7 @@ model Domain_Assignment {
   @@index([userId])
   @@index([domain])
   @@index([network])
+  @@index([accountId])
 }
 
 // Aggregated overview from all ad networks
@@ -236,12 +281,17 @@ model Bidder_Yandex {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  // Multi-account support
+  accountId     String?
+  account       NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
   // Unique constraint for upsert (prevents duplicates)
   @@unique([date, domain, tagId, userId])
   @@index([date])
   @@index([userId])
   @@index([domain])
   @@index([tagId])
+  @@index([accountId])
 }
 
 // ============================================
