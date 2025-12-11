@@ -84,16 +84,12 @@ export async function GET(request: Request) {
       };
     }
 
-    // Test 2: With Authorization header
+    // Test 2: With Authorization header - minimal params
     try {
       const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
         params: {
           date1: startDate,
           date2: endDate,
-          group: "day",
-          dimensions: "date",
-          metrics: "shows,clicks,partner_wo_nds",
-          currency: "usd",
           lang: "en",
         },
         headers: {
@@ -106,7 +102,7 @@ export async function GET(request: Request) {
 
       results.tests = {
         ...results.tests as object,
-        authHeader: {
+        minimalParams: {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -115,27 +111,24 @@ export async function GET(request: Request) {
     } catch (error) {
       results.tests = {
         ...results.tests as object,
-        authHeader: {
+        minimalParams: {
           error: error instanceof Error ? error.message : "Unknown error",
         },
       };
     }
 
-    // Test 3: Try Bearer token format
+    // Test 3: With pretty=1 to get formatted response
     try {
       const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
         params: {
           date1: startDate,
           date2: endDate,
-          group: "day",
-          dimensions: "date",
-          metrics: "shows,clicks,partner_wo_nds",
-          currency: "usd",
+          pretty: 1,
           lang: "en",
         },
         headers: {
           Accept: "application/json",
-          Authorization: `Bearer ${apiToken}`,
+          Authorization: `OAuth ${apiToken}`,
         },
         timeout: 30000,
         validateStatus: () => true,
@@ -143,7 +136,7 @@ export async function GET(request: Request) {
 
       results.tests = {
         ...results.tests as object,
-        bearerHeader: {
+        withPretty: {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -152,7 +145,73 @@ export async function GET(request: Request) {
     } catch (error) {
       results.tests = {
         ...results.tests as object,
-        bearerHeader: {
+        withPretty: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      };
+    }
+
+    // Test 4: Try the page_id endpoint to list pages/sites
+    try {
+      const response = await axios.get("https://partner2.yandex.ru/api/page2/list.json", {
+        params: {
+          lang: "en",
+        },
+        headers: {
+          Accept: "application/json",
+          Authorization: `OAuth ${apiToken}`,
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+
+      results.tests = {
+        ...results.tests as object,
+        pageList: {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data,
+        },
+      };
+    } catch (error) {
+      results.tests = {
+        ...results.tests as object,
+        pageList: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      };
+    }
+
+    // Test 5: Try with page_id parameter (maybe required)
+    try {
+      // First get pages, then use a page_id if available
+      const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
+        params: {
+          date1: startDate,
+          date2: endDate,
+          field: "date",
+          lang: "en",
+        },
+        headers: {
+          Accept: "application/json",
+          Authorization: `OAuth ${apiToken}`,
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+
+      results.tests = {
+        ...results.tests as object,
+        withField: {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data,
+        },
+      };
+    } catch (error) {
+      results.tests = {
+        ...results.tests as object,
+        withField: {
           error: error instanceof Error ? error.message : "Unknown error",
         },
       };
