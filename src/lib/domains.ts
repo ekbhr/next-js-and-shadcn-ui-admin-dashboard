@@ -138,9 +138,14 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
 
 /**
  * Sync domains to Domain_Assignment table
+ * 
+ * @param domains - List of domains to sync
+ * @param fallbackUserId - User ID to assign new domains to (required by schema)
+ * @param defaultRevShare - Default revShare for new domains
  */
 export async function syncDomainsToDatabase(
   domains: NetworkDomain[],
+  fallbackUserId: string,
   defaultRevShare: number = 80
 ): Promise<DomainSyncResult[]> {
   const results: DomainSyncResult[] = [];
@@ -176,11 +181,12 @@ export async function syncDomainsToDatabase(
         if (existing) {
           result.existing++;
         } else {
-          // Create new assignment (without user - admin will assign later)
+          // Create new assignment with fallback user
           await prisma.domain_Assignment.create({
             data: {
               domain: normalizedDomain,
               network: network,
+              userId: fallbackUserId,
               revShare: defaultRevShare,
               isActive: true,
               notes: `Auto-synced from ${network}`,
@@ -204,8 +210,12 @@ export async function syncDomainsToDatabase(
 /**
  * Sync domains from all networks to database
  * Main entry point for domain sync
+ * 
+ * @param fallbackUserId - User ID to assign new domains to (required by schema)
+ * @param defaultRevShare - Default revShare for new domains
  */
 export async function syncAllNetworkDomains(
+  fallbackUserId: string,
   defaultRevShare: number = 80
 ): Promise<AllNetworksSyncResult> {
   console.log("[Domains] Starting sync from all networks...");
@@ -215,7 +225,7 @@ export async function syncAllNetworkDomains(
 
   if (fetchResult.domains.length === 0) {
     return {
-      success: false,
+      success: fetchResult.errors.length === 0,
       results: [],
       totalFetched: 0,
       totalCreated: 0,
@@ -224,8 +234,12 @@ export async function syncAllNetworkDomains(
     };
   }
 
-  // Sync to database
-  const syncResults = await syncDomainsToDatabase(fetchResult.domains, defaultRevShare);
+  // Sync to database with fallback user
+  const syncResults = await syncDomainsToDatabase(
+    fetchResult.domains,
+    fallbackUserId,
+    defaultRevShare
+  );
 
   // Calculate totals
   const totalFetched = syncResults.reduce((sum, r) => sum + r.fetched, 0);

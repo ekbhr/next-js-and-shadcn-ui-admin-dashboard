@@ -28,6 +28,7 @@ export async function POST() {
       );
     }
 
+    const userId = session.user.id;
     console.log(`[Domain Sync] Starting for user: ${session.user.email}`);
 
     // Get network status
@@ -35,7 +36,8 @@ export async function POST() {
     console.log(`[Domain Sync] Network status:`, networkStatus);
 
     // Sync domains from all networks using centralized library
-    const syncResult = await syncAllNetworkDomains(80); // Default 80% revShare
+    // New domains are assigned to the current user (admin) by default
+    const syncResult = await syncAllNetworkDomains(userId, 80); // Default 80% revShare
 
     // Build results by network
     const networks: Record<string, { fetched: number; created: number; existing: number; errors: number }> = {};
