@@ -20,7 +20,7 @@ Integration with Yandex Advertising Network (YAN) Partner Statistics API to fetc
 | **Authentication** | OAuth Token |
 | **Token Env Variable** | `YANDEX_API` |
 | **Base URL** | `https://partner2.yandex.ru/api/statistics/v2/` |
-| **Currency** | AED (native support) |
+| **Currency** | USD |
 
 ---
 
@@ -59,7 +59,7 @@ model Bidder_Yandex {
   ctr           Float?
   rpm           Float?
   
-  currency      String   @default("AED")
+  currency      String   @default("USD")
   status        String?
   
   userId        String
@@ -118,7 +118,7 @@ const response = await fetch('https://partner2.yandex.ru/api/statistics/v2/get',
     date_to: '2025-12-10',
     dimensions: ['date', 'domain', 'tag_name'],
     metrics: ['shows', 'clicks', 'partner_wo_nds'],
-    currency: 'AED',
+    currency: 'USD',
     lang: 'en',
   }),
 });
@@ -186,12 +186,12 @@ Update `vercel.json`:
 ## Currency Strategy
 
 ### Current Plan (Phase 1):
-- **Yandex**: Fetch in AED (native support) ✅
+- **Yandex**: Fetch in USD ✅
 - **Sedo**: Keep in EUR (original)
-- **Dashboard**: Show currency symbol with values (€ for Sedo, Dh for Yandex)
+- **Dashboard**: Show currency symbol with values (€ for Sedo, $ for Yandex)
 
 ### Future Plan (Phase 2):
-- Unified currency (USD or AED) for all networks
+- Unified currency (USD) for all networks
 - Currency conversion with configurable exchange rates
 - Admin can set preferred display currency
 
