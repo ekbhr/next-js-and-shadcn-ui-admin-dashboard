@@ -183,6 +183,11 @@ class YandexClient {
 
   /**
    * Fetch revenue data from Yandex
+   * 
+   * Yandex Partner Statistics API required parameters:
+   * - date1, date2: Date range
+   * - period: Grouping period (day, week, month, total)
+   * - field: Fields to return (date, domain, tag, etc.)
    */
   async getRevenueData(
     params: YandexReportParams = {}
@@ -200,16 +205,15 @@ class YandexClient {
 
       console.log(`[Yandex API] Fetching data from ${startDate} to ${endDate}`);
 
-      // Build API request
-      // Yandex API uses specific parameter format
+      // Build API request with required parameters
+      // Based on Yandex Partner Statistics API v2
       const requestParams: Record<string, string | number | string[]> = {
         date1: startDate,
         date2: endDate,
-        group: "day", // Group by day
-        dimensions: "date,domain,tag_id,tag_name",
-        metrics: "shows,clicks,partner_wo_nds",
-        currency: "usd", // Use USD as requested
-        pretty: 0,
+        period: "day", // Required: grouping period
+        field: "date,domain,tag,shows,clicks,partner_wo_nds", // Required: fields to return
+        currency: "usd",
+        lang: "en",
       };
 
       const result = await this.makeApiRequest(requestParams);

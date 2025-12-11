@@ -84,12 +84,15 @@ export async function GET(request: Request) {
       };
     }
 
-    // Test 2: With Authorization header - minimal params
+    // Test 2: With correct required parameters (period + field)
     try {
       const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
         params: {
           date1: startDate,
           date2: endDate,
+          period: "day",
+          field: "date,shows,clicks,partner_wo_nds",
+          currency: "usd",
           lang: "en",
         },
         headers: {
@@ -102,7 +105,7 @@ export async function GET(request: Request) {
 
       results.tests = {
         ...results.tests as object,
-        minimalParams: {
+        correctParams: {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -111,19 +114,21 @@ export async function GET(request: Request) {
     } catch (error) {
       results.tests = {
         ...results.tests as object,
-        minimalParams: {
+        correctParams: {
           error: error instanceof Error ? error.message : "Unknown error",
         },
       };
     }
 
-    // Test 3: With pretty=1 to get formatted response
+    // Test 3: With domain field included
     try {
       const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
         params: {
           date1: startDate,
           date2: endDate,
-          pretty: 1,
+          period: "day",
+          field: "date,domain,shows,clicks,partner_wo_nds",
+          currency: "usd",
           lang: "en",
         },
         headers: {
@@ -136,7 +141,7 @@ export async function GET(request: Request) {
 
       results.tests = {
         ...results.tests as object,
-        withPretty: {
+        withDomain: {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -145,51 +150,21 @@ export async function GET(request: Request) {
     } catch (error) {
       results.tests = {
         ...results.tests as object,
-        withPretty: {
+        withDomain: {
           error: error instanceof Error ? error.message : "Unknown error",
         },
       };
     }
 
-    // Test 4: Try the page_id endpoint to list pages/sites
+    // Test 4: With tag field included
     try {
-      const response = await axios.get("https://partner2.yandex.ru/api/page2/list.json", {
-        params: {
-          lang: "en",
-        },
-        headers: {
-          Accept: "application/json",
-          Authorization: `OAuth ${apiToken}`,
-        },
-        timeout: 30000,
-        validateStatus: () => true,
-      });
-
-      results.tests = {
-        ...results.tests as object,
-        pageList: {
-          status: response.status,
-          statusText: response.statusText,
-          data: response.data,
-        },
-      };
-    } catch (error) {
-      results.tests = {
-        ...results.tests as object,
-        pageList: {
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-      };
-    }
-
-    // Test 5: Try with page_id parameter (maybe required)
-    try {
-      // First get pages, then use a page_id if available
       const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
         params: {
           date1: startDate,
           date2: endDate,
-          field: "date",
+          period: "day",
+          field: "date,domain,tag,shows,clicks,partner_wo_nds",
+          currency: "usd",
           lang: "en",
         },
         headers: {
@@ -202,7 +177,7 @@ export async function GET(request: Request) {
 
       results.tests = {
         ...results.tests as object,
-        withField: {
+        withTag: {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -211,7 +186,43 @@ export async function GET(request: Request) {
     } catch (error) {
       results.tests = {
         ...results.tests as object,
-        withField: {
+        withTag: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      };
+    }
+
+    // Test 5: period=total to get summary
+    try {
+      const response = await axios.get("https://partner2.yandex.ru/api/statistics2/get.json", {
+        params: {
+          date1: startDate,
+          date2: endDate,
+          period: "total",
+          field: "domain,shows,clicks,partner_wo_nds",
+          currency: "usd",
+          lang: "en",
+        },
+        headers: {
+          Accept: "application/json",
+          Authorization: `OAuth ${apiToken}`,
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+
+      results.tests = {
+        ...results.tests as object,
+        totalPeriod: {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data,
+        },
+      };
+    } catch (error) {
+      results.tests = {
+        ...results.tests as object,
+        totalPeriod: {
           error: error instanceof Error ? error.message : "Unknown error",
         },
       };
