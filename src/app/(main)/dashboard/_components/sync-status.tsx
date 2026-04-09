@@ -15,11 +15,13 @@ interface SyncStatusProps {
   lastSync: {
     sedo: Date | null;
     yandex: Date | null;
+    advertiv: Date | null;
     overall: Date | null;
   };
   recordCounts: {
     sedo: number;
     yandex: number;
+    advertiv: number;
     overview: number;
   };
   /** If true, shows detailed admin view. If false, shows friendly publisher view */
@@ -135,6 +137,17 @@ export function SyncStatus({ lastSync, recordCounts, isAdmin = false }: SyncStat
               </span>
               <Clock className="h-3 w-3 text-muted-foreground" />
               <span className="text-muted-foreground">{formatTimeAgo(lastSync.yandex)}</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Badge variant="outline" className={getNetworkColors("advertiv").outlineBadge}>
+                {getNetworkName("advertiv", true)}
+              </Badge>
+              <span className="text-muted-foreground">
+                {recordCounts.advertiv.toLocaleString()} records
+              </span>
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              <span className="text-muted-foreground">{formatTimeAgo(lastSync.advertiv)}</span>
             </div>
 
             <div className="flex items-center gap-1.5">

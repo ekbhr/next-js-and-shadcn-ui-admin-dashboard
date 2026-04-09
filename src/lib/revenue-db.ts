@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
 import type { SedoRevenueData } from "@/lib/sedo";
 import type { YandexRevenueData } from "@/lib/yandex";
+import type { AdvertivRevenueData } from "@/lib/advertiv";
 
 // Default revShare if no assignment found
 const DEFAULT_REV_SHARE = 80;
@@ -708,7 +709,7 @@ async function getDashboardSummaryImpl(
     
     // Top domains (1 query)
     prisma.overview_Report.groupBy({
-      by: ["domain"],
+      by: ["network", "domain"],
       where: whereClause,
       _sum: {
         grossRevenue: true,
@@ -784,8 +785,20 @@ async function getDashboardSummaryImpl(
   }));
 
   // Format top domains
+  const advertivDomains = topDomainsAgg
+    .filter((d) => d.network === "advertiv" && d.domain)
+    .map((d) => d.domain as string)
+    .sort((a, b) => a.localeCompare(b));
+  const advertivAliasMap = new Map<string, string>();
+  advertivDomains.forEach((domain, index) => {
+    advertivAliasMap.set(domain, `YH_Feed_${index + 1}`);
+  });
+
   const topDomains = topDomainsAgg.map((d) => ({
-    domain: d.domain || "All Domains",
+    domain:
+      d.network === "advertiv" && d.domain
+        ? advertivAliasMap.get(d.domain) || d.domain
+        : d.domain || "All Domains",
     grossRevenue: d._sum.grossRevenue || 0,
     netRevenue: d._sum.netRevenue || 0,
   }));
@@ -1376,6 +1389,300 @@ export async function syncYandexToOverviewReport(userId: string | null = null): 
 }
 
 // ============================================
+// ADVERTIV (YAHOO) REVENUE FUNCTIONS
+// ============================================
+
+/**
+ * Save Advertiv revenue data to database (upsert)
+ *
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN (subId), not the logged-in user.
+ */
+export async function saveAdvertivRevenue(
+  data: AdvertivRevenueData[],
+  fallbackUserId: string,
+  options: { saveToDomainOwner?: boolean; filterByAssignedDomains?: boolean; accountId?: string } = {}
+): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
+  let saved = 0;
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  const saveToDomainOwner = options.saveToDomainOwner !== false;
+  const domainAssignments = await getAllDomainAssignmentsMap("advertiv");
+
+  for (const item of data) {
+    try {
+      const domainValue = item.domain || item.subId || null;
+      const normalizedDomain = domainValue?.toLowerCase().trim();
+
+      let targetUserId = fallbackUserId;
+      let revShare = DEFAULT_REV_SHARE;
+
+      if (saveToDomainOwner && normalizedDomain) {
+        const assignment = domainAssignments.get(normalizedDomain);
+        if (assignment) {
+          targetUserId = assignment.userId;
+          revShare = assignment.revShare;
+        } else if (options.filterByAssignedDomains) {
+          skipped++;
+          continue;
+        }
+      } else if (options.filterByAssignedDomains && !normalizedDomain) {
+        skipped++;
+        continue;
+      }
+
+      const netRevenue = calculateNetRevenue(item.revenue, revShare);
+      const date = new Date(item.date);
+      date.setUTCHours(0, 0, 0, 0);
+
+      const subId = item.subId || domainValue;
+      const campaignId = item.campaignId || null;
+      const countryCode = item.countryCode || null;
+
+      const recordData = {
+        domain: domainValue,
+        pubId: item.pubId || null,
+        subId: subId || null,
+        campaignId,
+        campaignName: item.campaignName || null,
+        countryName: item.countryName || null,
+        countryCode,
+        totalSearches: item.totalSearches || 0,
+        monetizedSearches: item.monetizedSearches || 0,
+        monetizedCtr: item.monetizedCtr || null,
+        epc: item.epc || null,
+        grossRevenue: item.revenue,
+        netRevenue,
+        revShare,
+        impressions: item.impressions || item.totalSearches || 0,
+        clicks: item.clicks || 0,
+        ctr: item.ctr || null,
+        rpm: item.rpm || null,
+        status: "Estimated",
+        accountId: options.accountId || null,
+      };
+
+      const existing = await prisma.bidder_Advertiv.findFirst({
+        where: {
+          date,
+          subId: subId || null,
+          campaignId,
+          countryCode,
+          userId: targetUserId,
+        },
+      });
+
+      if (existing) {
+        await prisma.bidder_Advertiv.update({
+          where: { id: existing.id },
+          data: recordData,
+        });
+        updated++;
+      } else {
+        const existingOtherUser = await prisma.bidder_Advertiv.findFirst({
+          where: {
+            date,
+            subId: subId || null,
+            campaignId,
+            countryCode,
+          },
+        });
+
+        if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
+          await prisma.bidder_Advertiv.update({
+            where: { id: existingOtherUser.id },
+            data: { userId: targetUserId, ...recordData },
+          });
+          updated++;
+        } else if (!existingOtherUser) {
+          await prisma.bidder_Advertiv.create({
+            data: {
+              date,
+              currency: "USD",
+              userId: targetUserId,
+              ...recordData,
+            },
+          });
+          saved++;
+        } else {
+          updated++;
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Failed to save ${item.date} ${item.subId || item.domain}: ${errorMsg}`);
+      console.error("[Revenue DB] Advertiv error:", error);
+    }
+  }
+
+  cache.invalidatePrefix("dashboard:");
+  cache.invalidatePrefix("sync-status:");
+
+  return { saved, updated, skipped, errors };
+}
+
+export async function getAdvertivRevenue(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+    domain?: string;
+    campaignId?: string;
+    limit?: number;
+  } = {}
+) {
+  const { startDate, endDate, domain, campaignId, limit } = options;
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  if (domain) where.domain = domain;
+  if (campaignId) where.campaignId = campaignId;
+
+  return prisma.bidder_Advertiv.findMany({
+    where,
+    orderBy: { date: "asc" },
+    take: limit,
+  });
+}
+
+export async function getAdvertivRevenueSummary(
+  userId: string,
+  options: { startDate?: Date; endDate?: Date } = {}
+) {
+  const { startDate, endDate } = options;
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  const result = await prisma.bidder_Advertiv.aggregate({
+    where,
+    _sum: {
+      grossRevenue: true,
+      netRevenue: true,
+      impressions: true,
+      clicks: true,
+    },
+    _count: true,
+  });
+
+  return {
+    totalGrossRevenue: result._sum.grossRevenue || 0,
+    totalNetRevenue: result._sum.netRevenue || 0,
+    totalImpressions: result._sum.impressions || 0,
+    totalClicks: result._sum.clicks || 0,
+    recordCount: result._count,
+  };
+}
+
+export async function syncAdvertivToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
+  let synced = 0;
+  const errors: string[] = [];
+
+  try {
+    const advertivData = await prisma.bidder_Advertiv.findMany({
+      where: userId ? { userId } : undefined,
+    });
+
+    const grouped = new Map<string, {
+      userId: string;
+      date: Date;
+      domain: string | null;
+      grossRevenue: number;
+      netRevenue: number;
+      impressions: number;
+      clicks: number;
+    }>();
+
+    for (const record of advertivData) {
+      const key = `${record.userId}_${record.date.toISOString().split("T")[0]}_${record.domain || "all"}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.grossRevenue += record.grossRevenue;
+        existing.netRevenue += record.netRevenue;
+        existing.impressions += record.impressions;
+        existing.clicks += record.clicks;
+      } else {
+        grouped.set(key, {
+          userId: record.userId,
+          date: record.date,
+          domain: record.domain,
+          grossRevenue: record.grossRevenue,
+          netRevenue: record.netRevenue,
+          impressions: record.impressions,
+          clicks: record.clicks,
+        });
+      }
+    }
+
+    for (const [, data] of grouped) {
+      try {
+        const ctr = data.impressions > 0
+          ? Math.round((data.clicks / data.impressions) * 10000) / 100
+          : null;
+        const rpm = data.impressions > 0
+          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100
+          : null;
+
+        const recordData = {
+          grossRevenue: data.grossRevenue,
+          netRevenue: data.netRevenue,
+          impressions: data.impressions,
+          clicks: data.clicks,
+          ctr,
+          rpm,
+        };
+
+        const existing = await prisma.overview_Report.findFirst({
+          where: {
+            date: data.date,
+            network: "advertiv",
+            domain: data.domain,
+            userId: data.userId,
+          },
+        });
+
+        if (existing) {
+          await prisma.overview_Report.update({
+            where: { id: existing.id },
+            data: recordData,
+          });
+        } else {
+          await prisma.overview_Report.create({
+            data: {
+              date: data.date,
+              network: "advertiv",
+              domain: data.domain,
+              currency: "USD",
+              userId: data.userId,
+              ...recordData,
+            },
+          });
+        }
+
+        synced++;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
+      }
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return { synced, errors };
+}
+
+// ============================================
 // SYNC STATUS FUNCTIONS
 // ============================================
 
@@ -1385,12 +1692,13 @@ export async function syncYandexToOverviewReport(userId: string | null = null): 
 export async function getLastSyncTime(userId?: string): Promise<{
   sedo: Date | null;
   yandex: Date | null;
+  advertiv: Date | null;
   overall: Date | null;
 }> {
   const where = userId ? { userId } : {};
 
   // Get most recent updatedAt for each network
-  const [sedoRecord, yandexRecord] = await Promise.all([
+  const [sedoRecord, yandexRecord, advertivRecord] = await Promise.all([
     prisma.bidder_Sedo.findFirst({
       where,
       orderBy: { updatedAt: "desc" },
@@ -1401,22 +1709,24 @@ export async function getLastSyncTime(userId?: string): Promise<{
       orderBy: { updatedAt: "desc" },
       select: { updatedAt: true },
     }),
+    prisma.bidder_Advertiv.findFirst({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
   ]);
 
   const sedoTime = sedoRecord?.updatedAt || null;
   const yandexTime = yandexRecord?.updatedAt || null;
-
-  // Get the most recent overall
-  let overall: Date | null = null;
-  if (sedoTime && yandexTime) {
-    overall = sedoTime > yandexTime ? sedoTime : yandexTime;
-  } else {
-    overall = sedoTime || yandexTime;
-  }
+  const advertivTime = advertivRecord?.updatedAt || null;
+  const overall = [sedoTime, yandexTime, advertivTime]
+    .filter((d): d is Date => Boolean(d))
+    .sort((a, b) => b.getTime() - a.getTime())[0] || null;
 
   return {
     sedo: sedoTime,
     yandex: yandexTime,
+    advertiv: advertivTime,
     overall,
   };
 }
@@ -1428,11 +1738,13 @@ export async function getSyncStatus(userId?: string): Promise<{
   lastSync: {
     sedo: Date | null;
     yandex: Date | null;
+    advertiv: Date | null;
     overall: Date | null;
   };
   recordCounts: {
     sedo: number;
     yandex: number;
+    advertiv: number;
     overview: number;
   };
 }> {
@@ -1441,10 +1753,11 @@ export async function getSyncStatus(userId?: string): Promise<{
     async () => {
       const where = userId ? { userId } : {};
 
-      const [lastSync, sedoCount, yandexCount, overviewCount] = await Promise.all([
+      const [lastSync, sedoCount, yandexCount, advertivCount, overviewCount] = await Promise.all([
         getLastSyncTime(userId),
         prisma.bidder_Sedo.count({ where }),
         prisma.bidder_Yandex.count({ where }),
+        prisma.bidder_Advertiv.count({ where }),
         prisma.overview_Report.count({ where }),
       ]);
 
@@ -1453,6 +1766,7 @@ export async function getSyncStatus(userId?: string): Promise<{
         recordCounts: {
           sedo: sedoCount,
           yandex: yandexCount,
+          advertiv: advertivCount,
           overview: overviewCount,
         },
       };

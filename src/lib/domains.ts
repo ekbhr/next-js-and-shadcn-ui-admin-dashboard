@@ -11,7 +11,13 @@
 
 import { sedoClient } from "./sedo";
 import { yandexClient } from "./yandex";
+import { advertivClient } from "./advertiv";
 import { prisma } from "./prisma";
+import { getActiveAccountsWithCredentials } from "./network-accounts";
+import { createSedoClient } from "./sedo";
+import { createYandexClient } from "./yandex";
+import { createAdvertivClient } from "./advertiv";
+import { isSedoCredentials, isYandexCredentials, isAdvertivCredentials } from "./encryption";
 
 // Types
 export interface NetworkDomain {
@@ -43,20 +49,90 @@ export interface AllNetworksSyncResult {
  * Fetch domains from a specific network
  */
 export async function fetchDomainsFromNetwork(
-  network: "sedo" | "yandex"
+  network: "sedo" | "yandex" | "advertiv"
 ): Promise<{ success: boolean; domains: NetworkDomain[]; error?: string }> {
+  const allDomains: NetworkDomain[] = [];
+  const errors: string[] = [];
+
+  const accounts = await getActiveAccountsWithCredentials(network);
+  if (accounts.length > 0) {
+    for (const account of accounts) {
+      try {
+        if (network === "sedo" && isSedoCredentials(account.credentials)) {
+          const result = await createSedoClient(account.credentials, {
+            accountId: account.id,
+            accountName: account.name,
+          }).getDomains();
+          if (result.success) {
+            allDomains.push(...result.domains.map((d) => ({
+              domain: d.domain,
+              network: "sedo",
+              revenue: d.revenue,
+              impressions: d.impressions,
+              clicks: d.clicks,
+            })));
+          } else {
+            errors.push(`${account.name}: ${result.error}`);
+          }
+        } else if (network === "yandex" && isYandexCredentials(account.credentials)) {
+          const result = await createYandexClient(account.credentials, {
+            accountId: account.id,
+            accountName: account.name,
+          }).getDomains();
+          if (result.success) {
+            allDomains.push(...result.domains.map((d) => ({
+              domain: d.domain,
+              network: "yandex",
+              revenue: d.revenue,
+              impressions: d.impressions,
+              clicks: d.clicks,
+            })));
+          } else {
+            errors.push(`${account.name}: ${result.error}`);
+          }
+        } else if (network === "advertiv" && isAdvertivCredentials(account.credentials)) {
+          const result = await createAdvertivClient(account.credentials, {
+            accountId: account.id,
+            accountName: account.name,
+          }).getDomains();
+          if (result.success) {
+            allDomains.push(...result.domains.map((d) => ({
+              domain: d.domain,
+              network: "advertiv",
+              revenue: d.revenue,
+              impressions: d.impressions,
+              clicks: d.clicks,
+            })));
+          } else {
+            errors.push(`${account.name}: ${result.error}`);
+          }
+        } else {
+          errors.push(`${account.name}: Invalid credentials`);
+        }
+      } catch (error) {
+        errors.push(`${account.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    if (allDomains.length > 0) {
+      return {
+        success: true,
+        domains: allDomains,
+        error: errors.length > 0 ? errors.join("; ") : undefined,
+      };
+    }
+  }
+
   switch (network) {
-    case "sedo":
+    case "sedo": {
       if (!sedoClient.isConfigured()) {
         return { success: false, domains: [], error: "Sedo not configured" };
       }
-      const sedoResult = await sedoClient.getDomains();
-      if (!sedoResult.success) {
-        return { success: false, domains: [], error: sedoResult.error };
-      }
+      const result = await sedoClient.getDomains();
+      if (!result.success) return { success: false, domains: [], error: result.error };
       return {
         success: true,
-        domains: sedoResult.domains.map((d) => ({
+        domains: result.domains.map((d) => ({
           domain: d.domain,
           network: "sedo",
           revenue: d.revenue,
@@ -64,18 +140,16 @@ export async function fetchDomainsFromNetwork(
           clicks: d.clicks,
         })),
       };
-
-    case "yandex":
+    }
+    case "yandex": {
       if (!yandexClient.isConfigured()) {
         return { success: false, domains: [], error: "Yandex not configured" };
       }
-      const yandexResult = await yandexClient.getDomains();
-      if (!yandexResult.success) {
-        return { success: false, domains: [], error: yandexResult.error };
-      }
+      const result = await yandexClient.getDomains();
+      if (!result.success) return { success: false, domains: [], error: result.error };
       return {
         success: true,
-        domains: yandexResult.domains.map((d) => ({
+        domains: result.domains.map((d) => ({
           domain: d.domain,
           network: "yandex",
           revenue: d.revenue,
@@ -83,9 +157,26 @@ export async function fetchDomainsFromNetwork(
           clicks: d.clicks,
         })),
       };
-
+    }
+    case "advertiv": {
+      if (!advertivClient.isConfigured()) {
+        return { success: false, domains: [], error: "Advertiv not configured" };
+      }
+      const result = await advertivClient.getDomains();
+      if (!result.success) return { success: false, domains: [], error: result.error };
+      return {
+        success: true,
+        domains: result.domains.map((d) => ({
+          domain: d.domain,
+          network: "advertiv",
+          revenue: d.revenue,
+          impressions: d.impressions,
+          clicks: d.clicks,
+        })),
+      };
+    }
     default:
-      return { success: false, domains: [], error: `Unknown network: ${network}` };
+      return { success: false, domains: [], error: errors.join("; ") || `Unknown network: ${network}` };
   }
 }
 
@@ -125,6 +216,19 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
       console.log(`[Domains] Yandex: ${yandexResult.domains.length} domains`);
     } else {
       errors.push(`Yandex: ${yandexResult.error}`);
+    }
+  }
+
+  // Fetch from Advertiv
+  if (advertivClient.isConfigured()) {
+    console.log("[Domains] Fetching from Advertiv...");
+    const advertivResult = await fetchDomainsFromNetwork("advertiv");
+    if (advertivResult.success) {
+      allDomains.push(...advertivResult.domains);
+      byNetwork.advertiv = advertivResult.domains;
+      console.log(`[Domains] Advertiv: ${advertivResult.domains.length} domains`);
+    } else {
+      errors.push(`Advertiv: ${advertivResult.error}`);
     }
   }
 
@@ -509,12 +613,17 @@ export async function getAllDomainAssignments(options?: {
 export function getConfiguredNetworks(): string[] {
   const networks: string[] = [];
 
+  // Note: this check is env-var based. DB account status is handled separately where needed.
   if (sedoClient.isConfigured()) {
     networks.push("sedo");
   }
 
   if (yandexClient.isConfigured()) {
     networks.push("yandex");
+  }
+
+  if (advertivClient.isConfigured()) {
+    networks.push("advertiv");
   }
 
   return networks;
@@ -535,6 +644,10 @@ export function getNetworkStatus(): Record<
     yandex: {
       configured: yandexClient.isConfigured(),
       name: "Yandex Advertising Network",
+    },
+    advertiv: {
+      configured: advertivClient.isConfigured(),
+      name: "Yahoo",
     },
   };
 }

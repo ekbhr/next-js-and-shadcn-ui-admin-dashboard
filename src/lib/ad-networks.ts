@@ -141,6 +141,38 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
     envVar: "YANDEX_API",
   },
 
+  advertiv: {
+    id: "advertiv",
+    name: "Yahoo",
+    shortName: "Yahoo",
+    description: "Yahoo feed reporting via Advertiv API",
+    currency: "USD",
+    paymentTerms: "Monthly",
+    minPayout: 0,
+    colors: {
+      primary: "#6B46C1",
+      text: "text-purple-700",
+      bg: "bg-purple-50",
+      border: "border-purple-200",
+      badge: "bg-purple-100 text-purple-800 hover:bg-purple-200",
+      outlineBadge: "bg-purple-50 text-purple-700 border-purple-200",
+    },
+    features: {
+      revenue: true,
+      domains: true,
+      tags: false,
+      dailyBreakdown: true,
+      realtime: false,
+    },
+    api: {
+      baseUrl: "https://access.advertiv.com/api/stats",
+      authType: "apiKey",
+      docsUrl: "https://access.advertiv.com/api/stats",
+    },
+    status: "active",
+    envVar: "ADVERTIV_API_KEY",
+  },
+
   // ============================================
   // FUTURE NETWORKS (Templates)
   // ============================================

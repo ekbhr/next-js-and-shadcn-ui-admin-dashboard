@@ -59,6 +59,7 @@ model User {
   // Revenue & Reporting relations
   sedoRevenue       Bidder_Sedo[]
   yandexRevenue     Bidder_Yandex[]
+  advertivRevenue   Bidder_Advertiv[]
   domainAssignments Domain_Assignment[]
   overviewReports   Overview_Report[]
   
@@ -158,6 +159,7 @@ model NetworkAccount {
   domains       Domain_Assignment[]
   sedoRevenue   Bidder_Sedo[]
   yandexRevenue Bidder_Yandex[]
+  advertivRevenue Bidder_Advertiv[]
   
   @@unique([network, name])
   @@index([network])
@@ -337,6 +339,63 @@ model Bidder_Yandex {
   @@index([accountId])
 }
 
+// Advertiv (Yahoo feed) specific revenue data
+model Bidder_Advertiv {
+  id                String   @id @default(cuid())
+  
+  // Core fields
+  date              DateTime // Reporting date
+  domain            String?  // Stores subId for assignment/ownership mapping
+  
+  // Advertiv-specific fields
+  pubId             String?
+  subId             String?
+  campaignId        String?
+  campaignName      String?
+  countryName       String?
+  countryCode       String?
+  totalSearches     Int      @default(0)
+  monetizedSearches Int      @default(0)
+  monetizedCtr      Float?
+  epc               Float?
+  
+  // Revenue
+  grossRevenue      Float
+  netRevenue        Float
+  revShare          Float    @default(80)
+  currency          String   @default("USD")
+  
+  // Metrics
+  impressions       Int      @default(0)
+  clicks            Int      @default(0)
+  ctr               Float?
+  rpm               Float?
+  
+  // Metadata
+  status            String?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Multi-user support
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Multi-account support
+  accountId         String?
+  account           NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  
+  // Unique constraint for upsert (prevents duplicates)
+  @@unique([date, subId, campaignId, countryCode, userId])
+  @@index([date])
+  @@index([userId])
+  @@index([domain])
+  @@index([subId])
+  @@index([campaignId])
+  @@index([accountId])
+}
+
 // ============================================
 // USER PAYMENT DETAILS
 // ============================================
@@ -390,6 +449,7 @@ model SystemSettings {
   // Sync Configuration
   lastSedoSync          DateTime?
   lastYandexSync        DateTime?
+  lastAdvertivSync      DateTime?
   lastDomainSync        DateTime?
   
   // Timestamps

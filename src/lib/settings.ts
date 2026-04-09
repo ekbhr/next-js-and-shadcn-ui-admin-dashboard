@@ -16,6 +16,7 @@ export interface SystemSettings {
   adminEmail: string | null;
   lastSedoSync: Date | null;
   lastYandexSync: Date | null;
+  lastAdvertivSync: Date | null;
   lastDomainSync: Date | null;
 }
 
@@ -46,6 +47,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     adminEmail: settings.adminEmail,
     lastSedoSync: settings.lastSedoSync,
     lastYandexSync: settings.lastYandexSync,
+    lastAdvertivSync: settings.lastAdvertivSync,
     lastDomainSync: settings.lastDomainSync,
   };
 }
@@ -54,7 +56,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
  * Update system settings
  */
 export async function updateSystemSettings(
-  updates: Partial<Omit<SystemSettings, "lastSedoSync" | "lastYandexSync" | "lastDomainSync">>
+  updates: Partial<Omit<SystemSettings, "lastSedoSync" | "lastYandexSync" | "lastAdvertivSync" | "lastDomainSync">>
 ): Promise<SystemSettings> {
   const settings = await prisma.systemSettings.upsert({
     where: { id: SETTINGS_ID },
@@ -75,6 +77,7 @@ export async function updateSystemSettings(
     adminEmail: settings.adminEmail,
     lastSedoSync: settings.lastSedoSync,
     lastYandexSync: settings.lastYandexSync,
+    lastAdvertivSync: settings.lastAdvertivSync,
     lastDomainSync: settings.lastDomainSync,
   };
 }
@@ -83,11 +86,12 @@ export async function updateSystemSettings(
  * Update last sync timestamp for a network
  */
 export async function updateLastSync(
-  network: "sedo" | "yandex" | "domains"
+  network: "sedo" | "yandex" | "advertiv" | "domains"
 ): Promise<void> {
   const fieldMap = {
     sedo: "lastSedoSync",
     yandex: "lastYandexSync",
+    advertiv: "lastAdvertivSync",
     domains: "lastDomainSync",
   } as const;
 

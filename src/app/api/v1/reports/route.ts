@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey, checkRateLimit } from "@/lib/api-keys";
 import { prisma } from "@/lib/prisma";
+import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
 
 export async function GET(request: NextRequest) {
   try {
@@ -149,6 +150,12 @@ export async function GET(request: NextRequest) {
     // Format Response
     // ============================================
     
+    const aliasMap = buildAdvertivAliasMap(data);
+    const maskedData = data.map((row) => ({
+      ...row,
+      domain: maskAdvertivDomain(row.network, row.domain, aliasMap),
+    }));
+
     // CSV Export
     if (format === "csv") {
       if (!validation.scopes?.includes("reports:export")) {
@@ -159,7 +166,7 @@ export async function GET(request: NextRequest) {
       }
 
       const csvHeader = "date,network,domain,revenue,impressions,clicks,ctr,rpm,currency\n";
-      const csvRows = data.map(row => 
+      const csvRows = maskedData.map(row => 
         [
           row.date.toISOString().split("T")[0],
           row.network,
@@ -184,7 +191,7 @@ export async function GET(request: NextRequest) {
     }
 
     // JSON Response (default)
-    const formattedData = data.map(row => ({
+    const formattedData = maskedData.map(row => ({
       date: row.date.toISOString().split("T")[0],
       network: row.network,
       domain: row.domain,

@@ -103,6 +103,7 @@ export interface DomainSyncResponse extends ApiResponse {
   networkStatus?: {
     sedo: boolean;
     yandex: boolean;
+    advertiv?: boolean;
   };
   assignments?: DomainAssignment[];
 }
@@ -137,7 +138,7 @@ export interface PaymentDetailsInfo {
 // Network Account Types
 // ============================================
 
-export type NetworkType = "sedo" | "yandex";
+export type NetworkType = "sedo" | "yandex" | "advertiv";
 
 export interface NetworkAccountInfo {
   id: string;
@@ -195,6 +196,7 @@ export interface SystemSettingsInfo {
   adminEmail?: string | null;
   lastSedoSync?: Date | string | null;
   lastYandexSync?: Date | string | null;
+  lastAdvertivSync?: Date | string | null;
   lastDomainSync?: Date | string | null;
 }
 

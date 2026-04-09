@@ -17,6 +17,7 @@ import { getSystemSettings } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import { sedoClient } from "@/lib/sedo";
 import { yandexClient } from "@/lib/yandex";
+import { advertivClient } from "@/lib/advertiv";
 
 import { RevenueConfigSection } from "./_components/revenue-config-section";
 import { NetworkAccountsSection } from "./_components/network-accounts-section";
@@ -44,13 +45,15 @@ export default async function AdminSettingsPage() {
   const settings = await getSystemSettings();
 
   // Get record counts for data management display
-  const [sedoCount, yandexCount, overviewCount, domainCount, sedoAccountCount, yandexAccountCount] = await Promise.all([
+  const [sedoCount, yandexCount, advertivCount, overviewCount, domainCount, sedoAccountCount, yandexAccountCount, advertivAccountCount] = await Promise.all([
     prisma.bidder_Sedo.count(),
     prisma.bidder_Yandex.count(),
+    prisma.bidder_Advertiv.count(),
     prisma.overview_Report.count(),
     prisma.domain_Assignment.count(),
     prisma.networkAccount.count({ where: { network: "sedo", isActive: true } }),
     prisma.networkAccount.count({ where: { network: "yandex", isActive: true } }),
+    prisma.networkAccount.count({ where: { network: "advertiv", isActive: true } }),
   ]);
 
   // Get API connection status
@@ -65,6 +68,11 @@ export default async function AdminSettingsPage() {
       configured: yandexAccountCount > 0 || yandexClient.isConfigured(),
       lastSync: settings.lastYandexSync,
       accountCount: yandexAccountCount,
+    },
+    advertiv: {
+      configured: advertivAccountCount > 0 || advertivClient.isConfigured(),
+      lastSync: settings.lastAdvertivSync,
+      accountCount: advertivAccountCount,
     },
   };
 
@@ -96,6 +104,7 @@ export default async function AdminSettingsPage() {
           recordCounts={{
             sedo: sedoCount,
             yandex: yandexCount,
+            advertiv: advertivCount,
             overview: overviewCount,
             domains: domainCount,
           }}

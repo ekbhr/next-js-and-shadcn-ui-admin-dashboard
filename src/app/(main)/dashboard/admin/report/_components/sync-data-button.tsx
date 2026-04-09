@@ -74,6 +74,30 @@ export function SyncDataButton() {
         });
       }
 
+      // Sync Yahoo data
+      setResult("Syncing Yahoo...");
+      try {
+        const advertivResponse = await fetch("/api/reports/advertiv/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        const advertivData = await advertivResponse.json();
+        results.push({
+          network: "Yahoo",
+          success: advertivData.success,
+          saved: advertivData.sync?.saved,
+          updated: advertivData.sync?.updated,
+          skipped: advertivData.sync?.skipped,
+          error: advertivData.error,
+        });
+      } catch (error) {
+        results.push({
+          network: "Yahoo",
+          success: false,
+          error: error instanceof Error ? error.message : "Failed",
+        });
+      }
+
       // Build result message
       const successCount = results.filter((r) => r.success).length;
       const totalSaved = results.reduce((sum, r) => sum + (r.saved || 0), 0);

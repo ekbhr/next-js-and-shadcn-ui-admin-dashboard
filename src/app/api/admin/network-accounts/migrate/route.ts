@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { network } = body;
 
-    if (!network || !["sedo", "yandex"].includes(network)) {
+    if (!network || !["sedo", "yandex", "advertiv"].includes(network)) {
       return NextResponse.json(
-        { error: "Invalid network. Must be 'sedo' or 'yandex'" },
+        { error: "Invalid network. Must be 'sedo', 'yandex', or 'advertiv'" },
         { status: 400 }
       );
     }

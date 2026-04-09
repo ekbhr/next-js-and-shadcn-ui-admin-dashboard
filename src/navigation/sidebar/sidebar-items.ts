@@ -103,6 +103,12 @@ export const sidebarItems: NavGroup[] = [
         icon: Network,
         adminOnly: true,
       },
+      {
+        title: "Yahoo",
+        url: "/dashboard/admin/reports/advertiv",
+        icon: Network,
+        adminOnly: true,
+      },
     ],
   },
   {

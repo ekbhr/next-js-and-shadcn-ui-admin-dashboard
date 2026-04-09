@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/sync-yandex",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-advertiv",
+      "schedule": "0 7 * * *"
     }
   ]
 }

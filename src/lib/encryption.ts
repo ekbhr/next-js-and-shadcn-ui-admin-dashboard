@@ -112,7 +112,11 @@ export interface YandexCredentials {
   oauthToken: string;
 }
 
-export type NetworkCredentials = SedoCredentials | YandexCredentials;
+export interface AdvertivCredentials {
+  apiKey: string;
+}
+
+export type NetworkCredentials = SedoCredentials | YandexCredentials | AdvertivCredentials;
 
 /**
  * Type guard to check if credentials are Sedo credentials.
@@ -126,5 +130,12 @@ export function isSedoCredentials(creds: NetworkCredentials): creds is SedoCrede
  */
 export function isYandexCredentials(creds: NetworkCredentials): creds is YandexCredentials {
   return "oauthToken" in creds;
+}
+
+/**
+ * Type guard to check if credentials are Advertiv credentials.
+ */
+export function isAdvertivCredentials(creds: NetworkCredentials): creds is AdvertivCredentials {
+  return "apiKey" in creds;
 }
 
