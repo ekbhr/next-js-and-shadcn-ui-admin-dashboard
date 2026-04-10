@@ -76,7 +76,7 @@ export function formatDateForExport(date: Date | string): string {
 /**
  * Format currency for export
  */
-export function formatCurrencyForExport(value: number, currency = "EUR"): string {
+export function formatCurrencyForExport(value: number, currency = "USD"): string {
   return `${currency} ${value.toFixed(2)}`;
 }
 

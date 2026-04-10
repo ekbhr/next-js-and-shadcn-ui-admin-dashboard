@@ -86,7 +86,7 @@ export function DashboardChart({ dailyData, showGrossRevenue = false }: Dashboar
               tick={{ fontSize: 12 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `€${value}`}
+              tickFormatter={(value) => `$${value}`}
             />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -96,11 +96,11 @@ export function DashboardChart({ dailyData, showGrossRevenue = false }: Dashboar
                       <p className="font-medium mb-2">{label}</p>
                       {showGrossRevenue && (
                         <p className="text-sm text-blue-600">
-                          Gross: €{Number(payload[0]?.value ?? 0).toFixed(2)}
+                          Gross: ${Number(payload[0]?.value ?? 0).toFixed(2)}
                         </p>
                       )}
                       <p className="text-sm text-green-600">
-                        Revenue: €{Number(showGrossRevenue ? payload[1]?.value : payload[0]?.value ?? 0).toFixed(2)}
+                        Revenue: ${Number(showGrossRevenue ? payload[1]?.value : payload[0]?.value ?? 0).toFixed(2)}
                       </p>
                     </div>
                   );

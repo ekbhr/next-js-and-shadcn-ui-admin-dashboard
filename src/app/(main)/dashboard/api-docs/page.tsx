@@ -182,14 +182,14 @@ export default async function ApiDocsPage() {
   "data": [
     {
       "date": "2025-12-10",
-      "network": "sedo",
+      "network": "yandex",
       "domain": "example.com",
       "revenue": 45.50,
       "impressions": 12500,
       "clicks": 125,
       "ctr": 1.0,
       "rpm": 3.64,
-      "currency": "EUR"
+      "currency": "USD"
     }
   ],
   "pagination": {

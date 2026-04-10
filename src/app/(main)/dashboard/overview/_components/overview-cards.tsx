@@ -22,13 +22,13 @@ export function OverviewCards({ summary }: OverviewCardsProps) {
   const cards = [
     {
       title: "Gross Revenue",
-      value: `€${summary.totalGrossRevenue.toFixed(2)}`,
+      value: `$${summary.totalGrossRevenue.toFixed(2)}`,
       description: "Total earnings before revshare",
       icon: DollarSign,
     },
     {
       title: "Net Revenue",
-      value: `€${summary.totalNetRevenue.toFixed(2)}`,
+      value: `$${summary.totalNetRevenue.toFixed(2)}`,
       description: "Your share (80%)",
       icon: TrendingUp,
     },

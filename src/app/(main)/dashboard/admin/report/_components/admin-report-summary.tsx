@@ -18,14 +18,14 @@ export function AdminReportSummary({ totals }: AdminReportSummaryProps) {
   const cards = [
     {
       title: "Gross Revenue",
-      value: `€${totals.grossRevenue.toFixed(2)}`,
+      value: `$${totals.grossRevenue.toFixed(2)}`,
       description: "Total before revShare",
       icon: DollarSign,
       color: "text-blue-600",
     },
     {
       title: "Net Revenue",
-      value: `€${totals.netRevenue.toFixed(2)}`,
+      value: `$${totals.netRevenue.toFixed(2)}`,
       description: "Total after revShare",
       icon: TrendingUp,
       color: "text-green-600",

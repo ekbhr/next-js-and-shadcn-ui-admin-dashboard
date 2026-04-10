@@ -56,14 +56,14 @@ export function TopDomains({ domains, showGrossRevenue = false }: TopDomainsProp
                   </p>
                   {showGrossRevenue && (
                     <p className="text-xs text-muted-foreground">
-                      Net: €{domain.netRevenue.toFixed(2)}
+                      Net: ${domain.netRevenue.toFixed(2)}
                     </p>
                   )}
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-green-600">
-                  €{showGrossRevenue ? domain.grossRevenue.toFixed(2) : domain.netRevenue.toFixed(2)}
+                  ${showGrossRevenue ? domain.grossRevenue.toFixed(2) : domain.netRevenue.toFixed(2)}
                 </p>
               </div>
             </div>

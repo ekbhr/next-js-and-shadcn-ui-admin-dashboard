@@ -93,10 +93,10 @@ export function RevenueChart({ data }: RevenueChartProps) {
             />
             <YAxis 
               tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `€${value.toFixed(2)}`}
+              tickFormatter={(value) => `$${value.toFixed(2)}`}
             />
             <Tooltip 
-              formatter={(value: number) => [`€${value.toFixed(2)}`, ""]}
+              formatter={(value: number) => [`$${value.toFixed(2)}`, ""]}
               labelStyle={{ fontWeight: "bold" }}
             />
             <Legend />

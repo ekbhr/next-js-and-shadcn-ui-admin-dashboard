@@ -163,7 +163,7 @@ const userColumns: ColumnDef<UserTotal>[] = [
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-blue-600">
-        €{row.original.grossRevenue.toFixed(2)}
+        ${row.original.grossRevenue.toFixed(2)}
       </div>
     ),
   },
@@ -181,7 +181,7 @@ const userColumns: ColumnDef<UserTotal>[] = [
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-green-600">
-        €{row.original.netRevenue.toFixed(2)}
+        ${row.original.netRevenue.toFixed(2)}
       </div>
     ),
   },
@@ -313,7 +313,7 @@ const reportColumns: ColumnDef<Report>[] = [
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-blue-600">
-        €{row.original.grossRevenue.toFixed(2)}
+        ${row.original.grossRevenue.toFixed(2)}
       </div>
     ),
   },
@@ -331,7 +331,7 @@ const reportColumns: ColumnDef<Report>[] = [
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-green-600">
-        €{row.original.netRevenue.toFixed(2)}
+        ${row.original.netRevenue.toFixed(2)}
       </div>
     ),
   },
@@ -399,8 +399,8 @@ export function AdminReportTable({ reports, userTotals }: AdminReportTableProps)
         { key: "domainCount", header: "Domains" },
         { key: "impressions", header: "Impressions" },
         { key: "clicks", header: "Clicks" },
-        { key: "grossRevenue", header: "Gross Revenue (EUR)" },
-        { key: "netRevenue", header: "Net Revenue (EUR)" },
+        { key: "grossRevenue", header: "Gross Revenue (USD)" },
+        { key: "netRevenue", header: "Net Revenue (USD)" },
       ],
       `revenue-by-user-${new Date().toISOString().split("T")[0]}`
     );
@@ -423,8 +423,8 @@ export function AdminReportTable({ reports, userTotals }: AdminReportTableProps)
         { key: "domain", header: "Domain" },
         { key: "impressions", header: "Impressions" },
         { key: "clicks", header: "Clicks" },
-        { key: "grossRevenue", header: "Gross Revenue (EUR)" },
-        { key: "netRevenue", header: "Net Revenue (EUR)" },
+        { key: "grossRevenue", header: "Gross Revenue (USD)" },
+        { key: "netRevenue", header: "Net Revenue (USD)" },
       ],
       `revenue-details-${new Date().toISOString().split("T")[0]}`
     );

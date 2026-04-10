@@ -110,10 +110,10 @@ export function RevenueTable({ data }: RevenueTableProps) {
                   {record.ctr ? `${record.ctr}%` : "-"}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  €{record.grossRevenue.toFixed(2)}
+                  ${record.grossRevenue.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right font-medium text-green-600">
-                  €{record.netRevenue.toFixed(2)}
+                  ${record.netRevenue.toFixed(2)}
                 </TableCell>
               </TableRow>
             ))}

@@ -86,21 +86,21 @@ export function DashboardCards({ totals, byNetwork = [], comparison, showGrossRe
     // Gross Revenue - only for admins
     ...(showGrossRevenue ? [{
       title: "Gross Revenue",
-      value: `€${totals.grossRevenue.toFixed(2)}`,
-      description: `RPM: €${totals.rpm.toFixed(2)}`,
+      value: `$${totals.grossRevenue.toFixed(2)}`,
+      description: `RPM: $${totals.rpm.toFixed(2)}`,
       icon: DollarSign,
       color: "text-blue-600",
       change: comparison?.grossRevenue,
-      changePrefix: "€",
+      changePrefix: "$",
     }] : []),
     {
       title: "Revenue",
-      value: `€${totals.netRevenue.toFixed(2)}`,
+      value: `$${totals.netRevenue.toFixed(2)}`,
       description: showGrossRevenue ? "Your share (after revShare)" : "Total earnings",
       icon: TrendingUp,
       color: "text-green-600",
       change: comparison?.netRevenue,
-      changePrefix: "€",
+      changePrefix: "$",
     },
     {
       title: "Impressions",
@@ -163,7 +163,7 @@ export function DashboardCards({ totals, byNetwork = [], comparison, showGrossRe
                     {network.label}
                   </Badge>
                   <span className="text-sm font-medium">
-                    €{network.netRevenue.toFixed(2)}
+                    ${network.netRevenue.toFixed(2)}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     ({network.impressions.toLocaleString()} imp)

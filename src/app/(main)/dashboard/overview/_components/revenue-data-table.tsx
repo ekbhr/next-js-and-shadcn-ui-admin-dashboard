@@ -210,7 +210,7 @@ const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] =>
       ),
       cell: ({ row }) => (
         <div className="text-right font-medium text-blue-600">
-          €{row.original.grossRevenue.toFixed(2)}
+          ${row.original.grossRevenue.toFixed(2)}
         </div>
       ),
     });
@@ -231,7 +231,7 @@ const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] =>
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-green-600">
-        €{row.original.netRevenue.toFixed(2)}
+        ${row.original.netRevenue.toFixed(2)}
       </div>
     ),
   });
@@ -290,9 +290,9 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
     ];
 
     if (showGrossRevenue) {
-      exportColumns.push({ key: "grossRevenue", header: "Gross Revenue (EUR)" });
+      exportColumns.push({ key: "grossRevenue", header: "Gross Revenue (USD)" });
     }
-    exportColumns.push({ key: "netRevenue", header: "Net Revenue (EUR)" });
+    exportColumns.push({ key: "netRevenue", header: "Net Revenue (USD)" });
 
     exportToCSV(filteredData, exportColumns, `revenue-overview-${new Date().toISOString().split("T")[0]}`);
   };
