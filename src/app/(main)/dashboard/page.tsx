@@ -32,15 +32,18 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
+  const showGrossRevenue = canViewGrossRevenue(session.user.role);
+  const userIsAdmin = isAdmin(session.user.role);
+  /** Admins have no per-user overview rows; show platform-wide totals like Admin Report. */
+  const dataScope: "user" | "all" = userIsAdmin ? "all" : "user";
+
   const params = await searchParams;
   const period = params.period === "last" ? "last" : "current";
   const [data, syncStatus, comparison] = await Promise.all([
-    getDashboardSummary(session.user.id, period),
-    getSyncStatus(session.user.id),
-    getRevenueComparison(session.user.id),
+    getDashboardSummary(session.user.id, period, dataScope),
+    getSyncStatus(userIsAdmin ? undefined : session.user.id),
+    getRevenueComparison(session.user.id, dataScope),
   ]);
-  const showGrossRevenue = canViewGrossRevenue(session.user.role);
-  const userIsAdmin = isAdmin(session.user.role);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -50,6 +53,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
             {period === "current" ? "Current Month" : "Last Month"} Summary ({data.dateRange.start} to {data.dateRange.end})
+            {userIsAdmin && (
+              <span className="block text-xs mt-1">All publishers combined</span>
+            )}
           </p>
         </div>
         <PeriodToggle currentPeriod={period} />

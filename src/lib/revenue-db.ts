@@ -588,11 +588,16 @@ export async function getOverviewReport(
     network?: string;
     domain?: string;
     limit?: number;
+    /** Admin: aggregate all publishers (omit userId filter). */
+    scope?: "user" | "all";
   } = {}
 ) {
-  const { startDate, endDate, network, domain, limit } = options;
+  const { startDate, endDate, network, domain, limit, scope = "user" } = options;
 
-  const where: Record<string, unknown> = { userId };
+  const where: Record<string, unknown> = {};
+  if (scope !== "all") {
+    where.userId = userId;
+  }
 
   if (startDate || endDate) {
     where.date = {};
@@ -640,18 +645,21 @@ export async function getOverviewReport(
  */
 export async function getDashboardSummary(
   userId: string,
-  period: "current" | "last" = "current"
+  period: "current" | "last" = "current",
+  scope: "user" | "all" = "user"
 ) {
+  const cacheUserId = scope === "all" ? "__all__" : userId;
   return cache.get(
-    CacheKeys.dashboardSummary(userId, period),
-    async () => getDashboardSummaryImpl(userId, period),
+    CacheKeys.dashboardSummary(cacheUserId, period),
+    async () => getDashboardSummaryImpl(userId, period, scope),
     CacheTTL.MEDIUM // 5 minutes
   );
 }
 
 async function getDashboardSummaryImpl(
   userId: string,
-  period: "current" | "last" = "current"
+  period: "current" | "last" = "current",
+  scope: "user" | "all" = "user"
 ) {
   // Calculate date range
   const now = new Date();
@@ -669,13 +677,21 @@ async function getDashboardSummaryImpl(
   }
 
   // OPTIMIZED: Get aggregated data in parallel
-  const whereClause = {
-    userId,
-    date: {
-      gte: startDate,
-      lte: endDate,
-    },
-  };
+  const whereClause =
+    scope === "all"
+      ? {
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+        }
+      : {
+          userId,
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+        };
 
   const [totalsAgg, byNetworkAgg, dailyData, topDomainsAgg] = await Promise.all([
     // Total aggregates (1 query)
@@ -989,7 +1005,8 @@ async function getDashboardSummaryLegacy(
  * Get revenue comparison between current and previous period
  */
 export async function getRevenueComparison(
-  userId: string
+  userId: string,
+  scope: "user" | "all" = "user"
 ): Promise<{
   current: {
     grossRevenue: number;
@@ -1021,11 +1038,13 @@ export async function getRevenueComparison(
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth);
 
+  const userFilter = scope === "all" ? {} : { userId };
+
   // Fetch both periods
   const [currentData, previousData] = await Promise.all([
     prisma.overview_Report.aggregate({
       where: {
-        userId,
+        ...userFilter,
         date: { gte: currentStart, lte: currentEnd },
       },
       _sum: {
@@ -1037,7 +1056,7 @@ export async function getRevenueComparison(
     }),
     prisma.overview_Report.aggregate({
       where: {
-        userId,
+        ...userFilter,
         date: { gte: lastMonthStart, lte: lastMonthEnd },
       },
       _sum: {

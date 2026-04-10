@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 import { redirect } from "next/navigation";
 import { getOverviewReport } from "@/lib/revenue-db";
-import { canViewGrossRevenue } from "@/lib/roles";
+import { canViewGrossRevenue, isAdmin } from "@/lib/roles";
 import { RevenueDataTable } from "./_components/revenue-data-table";
 import { OverviewFilters } from "./_components/overview-filters";
 import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
@@ -36,7 +36,9 @@ export default async function OverviewPage({ searchParams }: PageProps) {
   const userId = session.user.id;
   const params = await searchParams;
   const showGrossRevenue = canViewGrossRevenue(session.user.role);
-  
+  const userIsAdmin = isAdmin(session.user.role);
+  const dataScope: "user" | "all" = userIsAdmin ? "all" : "user";
+
   // Parse filter params
   const network = params.network || undefined;
   const days = parseInt(params.days || "31");
@@ -50,6 +52,7 @@ export default async function OverviewPage({ searchParams }: PageProps) {
     startDate,
     endDate,
     network,
+    scope: dataScope,
   });
 
   const aliasMap = buildAdvertivAliasMap(data);
@@ -69,6 +72,9 @@ export default async function OverviewPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-bold">Revenue Data</h1>
           <p className="text-muted-foreground">
             Detailed breakdown by network and domain
+            {userIsAdmin && (
+              <span className="block text-xs mt-1">All publishers</span>
+            )}
           </p>
         </div>
         <OverviewFilters 
