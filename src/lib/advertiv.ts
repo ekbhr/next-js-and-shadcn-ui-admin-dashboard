@@ -179,9 +179,11 @@ class AdvertivClient {
     }
 
     try {
-      const to = params.to || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      // Default range: last 31 days (aligned with Sedo / Yandex sync)
+      const to = params.to || new Date().toISOString().split("T")[0];
       const from =
-        params.from || new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        params.from ||
+        new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
       const queryParams: Record<string, string> = {
         key: this.apiKey!,
