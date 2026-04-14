@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getNetworkName } from "@/lib/ad-networks";
 
 interface OverviewFiltersProps {
   networks: string[];
@@ -53,7 +54,7 @@ export function OverviewFilters({
           <SelectItem value="all">All Networks</SelectItem>
           {networks.map((network) => (
             <SelectItem key={network} value={network}>
-              {network.charAt(0).toUpperCase() + network.slice(1)}
+              {getNetworkName(network, true)}
             </SelectItem>
           ))}
         </SelectContent>
