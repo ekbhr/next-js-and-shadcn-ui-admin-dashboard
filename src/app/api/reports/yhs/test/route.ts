@@ -37,7 +37,7 @@ async function testYhsApi(request: Request) {
         message: "YHS API is not configured",
         config: {
           hasApiKey: configStatus.hasApiKey,
-          apiUrl: configStatus.apiUrl,
+          baseUrl: configStatus.baseUrl,
         },
         instructions: ["Add YHS_API_KEY to .env.local", "Restart the development server"],
       });
@@ -48,8 +48,8 @@ async function testYhsApi(request: Request) {
     startDate.setDate(today.getDate() - 7);
 
     const result = await yhsClient.getRevenueData({
-      startDate: startDate.toISOString().split("T")[0],
-      endDate: today.toISOString().split("T")[0],
+      from: startDate.toISOString().split("T")[0],
+      to: today.toISOString().split("T")[0],
     });
 
     return NextResponse.json({
@@ -57,7 +57,7 @@ async function testYhsApi(request: Request) {
       message: result.success ? "YHS API connection test completed" : "YHS API test failed",
       config: {
         hasApiKey: configStatus.hasApiKey,
-        apiUrl: configStatus.apiUrl,
+        baseUrl: configStatus.baseUrl,
       },
       testResult: {
         dataReturned: result.success,

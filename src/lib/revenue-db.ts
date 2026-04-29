@@ -1922,7 +1922,7 @@ export async function saveYhsRevenue(
         if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
           await prisma.bidder_YHS.update({
             where: { id: existingOtherUser.id },
-            data: { userId: targetUserId, ...recordData },
+            data: recordData,
           });
           updated++;
         } else if (!existingOtherUser) {
