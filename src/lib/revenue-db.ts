@@ -1706,6 +1706,14 @@ export async function syncAdvertivToOverviewReport(userId: string | null = null)
 // SYNC STATUS FUNCTIONS
 // ============================================
 
+function isMissingDbObjectError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const prismaCode = "code" in error ? String((error as { code?: string }).code) : "";
+  if (prismaCode === "P2021" || prismaCode === "P2022") return true;
+  const message = "message" in error ? String((error as { message?: string }).message) : "";
+  return message.includes("Bidder_YHS") || message.includes("lastYhsSync");
+}
+
 /**
  * Get the last sync time for each network
  */
@@ -1735,11 +1743,16 @@ export async function getLastSyncTime(userId?: string): Promise<{
       orderBy: { updatedAt: "desc" },
       select: { updatedAt: true },
     }),
-    prisma.bidder_YHS.findFirst({
-      where,
-      orderBy: { updatedAt: "desc" },
-      select: { updatedAt: true },
-    }),
+    prisma.bidder_YHS
+      .findFirst({
+        where,
+        orderBy: { updatedAt: "desc" },
+        select: { updatedAt: true },
+      })
+      .catch((error) => {
+        if (isMissingDbObjectError(error)) return null;
+        throw error;
+      }),
   ]);
 
   const sedoTime = sedoRecord?.updatedAt || null;
@@ -1788,7 +1801,10 @@ export async function getSyncStatus(userId?: string): Promise<{
         prisma.bidder_Sedo.count({ where }),
         prisma.bidder_Yandex.count({ where }),
         prisma.bidder_Advertiv.count({ where }),
-        prisma.bidder_YHS.count({ where }),
+        prisma.bidder_YHS.count({ where }).catch((error) => {
+          if (isMissingDbObjectError(error)) return 0;
+          throw error;
+        }),
         prisma.overview_Report.count({ where }),
       ]);
 
