@@ -42,6 +42,13 @@ const schedules: ScheduleItem[] = [
     localTime: "11:00 AM Dubai (GST)",
     description: "Daily revenue sync",
   },
+  {
+    network: "yhs",
+    cron: "0 8 * * *",
+    utcTime: "8:00 AM UTC",
+    localTime: "12:00 PM Dubai (GST)",
+    description: "Daily revenue sync",
+  },
 ];
 
 export function SyncScheduleSection() {

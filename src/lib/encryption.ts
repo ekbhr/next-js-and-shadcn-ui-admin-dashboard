@@ -116,7 +116,11 @@ export interface AdvertivCredentials {
   apiKey: string;
 }
 
-export type NetworkCredentials = SedoCredentials | YandexCredentials | AdvertivCredentials;
+export interface YhsCredentials {
+  apiKey: string;
+}
+
+export type NetworkCredentials = SedoCredentials | YandexCredentials | AdvertivCredentials | YhsCredentials;
 
 /**
  * Type guard to check if credentials are Sedo credentials.
@@ -136,6 +140,13 @@ export function isYandexCredentials(creds: NetworkCredentials): creds is YandexC
  * Type guard to check if credentials are Advertiv credentials.
  */
 export function isAdvertivCredentials(creds: NetworkCredentials): creds is AdvertivCredentials {
+  return "apiKey" in creds;
+}
+
+/**
+ * Type guard to check if credentials are YHS credentials.
+ */
+export function isYhsCredentials(creds: NetworkCredentials): creds is YhsCredentials {
   return "apiKey" in creds;
 }
 

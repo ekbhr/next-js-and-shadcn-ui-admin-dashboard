@@ -2,7 +2,7 @@
  * Admin Data Cleanup API
  * 
  * DELETE /api/admin/cleanup-data
- * Removes all revenue data (Bidder_Sedo, Bidder_Yandex, Bidder_Advertiv, and Overview_Report) for cleanup before resync.
+ * Removes all revenue data (Bidder_Sedo, Bidder_Yandex, Bidder_Advertiv, Bidder_YHS and Overview_Report) for cleanup before resync.
  * 
  * GET /api/admin/cleanup-data?userId=xxx
  * Removes data for a specific user only.
@@ -33,7 +33,7 @@ export async function DELETE(request: Request) {
     }
 
     // Parse request body for type-specific deletion
-    let type: "sedo" | "yandex" | "advertiv" | "all" = "all";
+    let type: "sedo" | "yandex" | "advertiv" | "yhs" | "all" = "all";
     let userId: string | null = null;
 
     try {
@@ -48,7 +48,7 @@ export async function DELETE(request: Request) {
 
     if (userId) {
       // Delete data for specific user
-      const results: { sedo?: number; yandex?: number; advertiv?: number; overview?: number } = {};
+      const results: { sedo?: number; yandex?: number; advertiv?: number; yhs?: number; overview?: number } = {};
 
       if (type === "sedo" || type === "all") {
         const sedoDeleted = await prisma.bidder_Sedo.deleteMany({ where: { userId } });
@@ -61,6 +61,10 @@ export async function DELETE(request: Request) {
       if (type === "advertiv" || type === "all") {
         const advertivDeleted = await prisma.bidder_Advertiv.deleteMany({ where: { userId } });
         results.advertiv = advertivDeleted.count;
+      }
+      if (type === "yhs" || type === "all") {
+        const yhsDeleted = await prisma.bidder_YHS.deleteMany({ where: { userId } });
+        results.yhs = yhsDeleted.count;
       }
       if (type === "all") {
         const overviewDeleted = await prisma.overview_Report.deleteMany({ where: { userId } });
@@ -75,7 +79,7 @@ export async function DELETE(request: Request) {
     }
 
     // Delete based on type
-    const results: { sedo?: number; yandex?: number; advertiv?: number; overview?: number } = {};
+    const results: { sedo?: number; yandex?: number; advertiv?: number; yhs?: number; overview?: number } = {};
 
     if (type === "sedo") {
       const sedoDeleted = await prisma.bidder_Sedo.deleteMany({});
@@ -116,21 +120,36 @@ export async function DELETE(request: Request) {
       });
     }
 
+    if (type === "yhs") {
+      const yhsDeleted = await prisma.bidder_YHS.deleteMany({});
+      const overviewDeleted = await prisma.overview_Report.deleteMany({ where: { network: "yhs" } });
+      results.yhs = yhsDeleted.count;
+      results.overview = overviewDeleted.count;
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted ${results.yhs} YHS records and ${results.overview} overview records`,
+        deleted: results,
+      });
+    }
+
     // Delete ALL data (for full resync)
-    const [sedoDeleted, yandexDeleted, advertivDeleted, overviewDeleted] = await Promise.all([
+    const [sedoDeleted, yandexDeleted, advertivDeleted, yhsDeleted, overviewDeleted] = await Promise.all([
       prisma.bidder_Sedo.deleteMany({}),
       prisma.bidder_Yandex.deleteMany({}),
       prisma.bidder_Advertiv.deleteMany({}),
+      prisma.bidder_YHS.deleteMany({}),
       prisma.overview_Report.deleteMany({}),
     ]);
 
     return NextResponse.json({
       success: true,
-      message: "All revenue data deleted (Sedo + Yandex + Yahoo + Overview). Ready for resync.",
+      message: "All revenue data deleted (Sedo + Yandex + Yahoo + YHS + Overview). Ready for resync.",
       deleted: {
         bidderSedo: sedoDeleted.count,
         bidderYandex: yandexDeleted.count,
         bidderAdvertiv: advertivDeleted.count,
+        bidderYhs: yhsDeleted.count,
         overviewReport: overviewDeleted.count,
       },
     });
@@ -164,7 +183,7 @@ export async function GET() {
     }
 
     // Get counts by user for all tables
-    const [sedoByUser, yandexByUser, advertivByUser, overviewByUser] = await Promise.all([
+    const [sedoByUser, yandexByUser, advertivByUser, yhsByUser, overviewByUser] = await Promise.all([
       prisma.bidder_Sedo.groupBy({
         by: ["userId"],
         _count: true,
@@ -174,6 +193,10 @@ export async function GET() {
         _count: true,
       }),
       prisma.bidder_Advertiv.groupBy({
+        by: ["userId"],
+        _count: true,
+      }),
+      prisma.bidder_YHS.groupBy({
         by: ["userId"],
         _count: true,
       }),
@@ -188,6 +211,7 @@ export async function GET() {
       ...sedoByUser.map(s => s.userId),
       ...yandexByUser.map(y => y.userId),
       ...advertivByUser.map(a => a.userId),
+      ...yhsByUser.map(y => y.userId),
       ...overviewByUser.map(o => o.userId),
     ])];
 
@@ -205,6 +229,7 @@ export async function GET() {
       sedoRecords: sedoByUser.find(s => s.userId === userId)?._count || 0,
       yandexRecords: yandexByUser.find(y => y.userId === userId)?._count || 0,
       advertivRecords: advertivByUser.find(a => a.userId === userId)?._count || 0,
+      yhsRecords: yhsByUser.find(y => y.userId === userId)?._count || 0,
       overviewRecords: overviewByUser.find(o => o.userId === userId)?._count || 0,
     }));
 
@@ -215,6 +240,7 @@ export async function GET() {
         sedoRecords: sedoByUser.reduce((sum, s) => sum + s._count, 0),
         yandexRecords: yandexByUser.reduce((sum, y) => sum + y._count, 0),
         advertivRecords: advertivByUser.reduce((sum, a) => sum + a._count, 0),
+        yhsRecords: yhsByUser.reduce((sum, y) => sum + y._count, 0),
         overviewRecords: overviewByUser.reduce((sum, s) => sum + s._count, 0),
       },
     });

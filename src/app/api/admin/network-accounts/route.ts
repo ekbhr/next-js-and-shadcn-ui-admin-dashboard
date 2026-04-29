@@ -18,7 +18,7 @@ import {
   getNetworkAccounts,
   migrateEnvCredentialsToDatabase,
 } from "@/lib/network-accounts";
-import type { AdvertivCredentials, SedoCredentials, YandexCredentials } from "@/lib/encryption";
+import type { AdvertivCredentials, SedoCredentials, YandexCredentials, YhsCredentials } from "@/lib/encryption";
 
 // ============================================
 // GET - List all accounts
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const network = searchParams.get("network") as "sedo" | "yandex" | "advertiv" | null;
+    const network = searchParams.get("network") as "sedo" | "yandex" | "advertiv" | "yhs" | null;
 
     const accounts = await getNetworkAccounts(network || undefined);
 
@@ -80,9 +80,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate network type
-    if (!["sedo", "yandex", "advertiv"].includes(network)) {
+    if (!["sedo", "yandex", "advertiv", "yhs"].includes(network)) {
       return NextResponse.json(
-        { error: "Invalid network type. Must be 'sedo', 'yandex', or 'advertiv'" },
+        { error: "Invalid network type. Must be 'sedo', 'yandex', 'advertiv', or 'yhs'" },
         { status: 400 }
       );
     }
@@ -109,6 +109,14 @@ export async function POST(request: NextRequest) {
       if (!advertivCreds.apiKey) {
         return NextResponse.json(
           { error: "Advertiv requires: apiKey" },
+          { status: 400 }
+        );
+      }
+    } else if (network === "yhs") {
+      const yhsCreds = credentials as YhsCredentials;
+      if (!yhsCreds.apiKey) {
+        return NextResponse.json(
+          { error: "YHS requires: apiKey" },
           { status: 400 }
         );
       }

@@ -62,7 +62,7 @@ export function NetworkAccountsSection() {
   const [showPasswords, setShowPasswords] = useState(false);
 
   // Form state
-  const [formNetwork, setFormNetwork] = useState<"sedo" | "yandex" | "advertiv">("sedo");
+  const [formNetwork, setFormNetwork] = useState<"sedo" | "yandex" | "advertiv" | "yhs">("sedo");
   const [formName, setFormName] = useState("");
   const [formIsDefault, setFormIsDefault] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -78,6 +78,8 @@ export function NetworkAccountsSection() {
 
   // Advertiv credentials
   const [advertivApiKey, setAdvertivApiKey] = useState("");
+  // YHS credentials
+  const [yhsApiKey, setYhsApiKey] = useState("");
 
   // Load accounts
   useEffect(() => {
@@ -109,6 +111,7 @@ export function NetworkAccountsSection() {
     setSedoPassword("");
     setYandexToken("");
     setAdvertivApiKey("");
+    setYhsApiKey("");
     setEditingAccount(null);
   };
 
@@ -129,9 +132,14 @@ export function NetworkAccountsSection() {
         toast.error("Yandex OAuth token is required");
         return;
       }
-    } else {
+    } else if (formNetwork === "advertiv") {
       if (!advertivApiKey) {
         toast.error("Yahoo API key is required");
+        return;
+      }
+    } else {
+      if (!yhsApiKey) {
+        toast.error("YHS API key is required");
         return;
       }
     }
@@ -143,7 +151,9 @@ export function NetworkAccountsSection() {
         ? { partnerId: sedoPartnerId, signKey: sedoSignKey, username: sedoUsername, password: sedoPassword }
         : formNetwork === "yandex"
           ? { oauthToken: yandexToken }
-          : { apiKey: advertivApiKey };
+          : formNetwork === "advertiv"
+            ? { apiKey: advertivApiKey }
+            : { apiKey: yhsApiKey };
 
       const response = await fetch("/api/admin/network-accounts", {
         method: editingAccount ? "PATCH" : "POST",
@@ -274,6 +284,7 @@ export function NetworkAccountsSection() {
   const sedoAccounts = accounts.filter(a => a.network === "sedo");
   const yandexAccounts = accounts.filter(a => a.network === "yandex");
   const advertivAccounts = accounts.filter(a => a.network === "advertiv");
+  const yhsAccounts = accounts.filter(a => a.network === "yhs");
 
   return (
     <Card>
@@ -314,7 +325,7 @@ export function NetworkAccountsSection() {
                   <Label>Network</Label>
                   <Select
                     value={formNetwork}
-                    onValueChange={(v) => setFormNetwork(v as "sedo" | "yandex" | "advertiv")}
+                    onValueChange={(v) => setFormNetwork(v as "sedo" | "yandex" | "advertiv" | "yhs")}
                     disabled={!!editingAccount}
                   >
                     <SelectTrigger>
@@ -324,6 +335,7 @@ export function NetworkAccountsSection() {
                       <SelectItem value="sedo">Sedo</SelectItem>
                       <SelectItem value="yandex">Yandex (YAN)</SelectItem>
                       <SelectItem value="advertiv">Yahoo (Advertiv)</SelectItem>
+                      <SelectItem value="yhs">YHS</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -423,6 +435,30 @@ export function NetworkAccountsSection() {
                         placeholder="Enter Advertiv API Key"
                         value={advertivApiKey}
                         onChange={(e) => setAdvertivApiKey(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
+                        onClick={() => setShowPasswords(!showPasswords)}
+                      >
+                        {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* YHS Credentials */}
+                {formNetwork === "yhs" && (
+                  <div className="space-y-2">
+                    <Label>API Key</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords ? "text" : "password"}
+                        placeholder="Enter YHS API Key"
+                        value={yhsApiKey}
+                        onChange={(e) => setYhsApiKey(e.target.value)}
                       />
                       <Button
                         type="button"
@@ -537,6 +573,30 @@ export function NetworkAccountsSection() {
                 </h4>
                 <div className="space-y-2">
                   {advertivAccounts.map((account) => (
+                    <AccountRow
+                      key={account.id}
+                      account={account}
+                      onToggleActive={() => handleToggleActive(account)}
+                      onSetDefault={() => handleSetDefault(account)}
+                      onLinkDomains={() => handleLinkDomains(account)}
+                      onDelete={() => handleDelete(account.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* YHS Accounts */}
+            {yhsAccounts.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Badge className={getNetworkColors("yhs").badge}>
+                    {getNetworkName("yhs", true)}
+                  </Badge>
+                  <span className="text-muted-foreground">({yhsAccounts.length})</span>
+                </h4>
+                <div className="space-y-2">
+                  {yhsAccounts.map((account) => (
                     <AccountRow
                       key={account.id}
                       account={account}

@@ -60,6 +60,7 @@ model User {
   sedoRevenue       Bidder_Sedo[]
   yandexRevenue     Bidder_Yandex[]
   advertivRevenue   Bidder_Advertiv[]
+  yhsRevenue        Bidder_YHS[]
   domainAssignments Domain_Assignment[]
   overviewReports   Overview_Report[]
   
@@ -160,6 +161,7 @@ model NetworkAccount {
   sedoRevenue   Bidder_Sedo[]
   yandexRevenue Bidder_Yandex[]
   advertivRevenue Bidder_Advertiv[]
+  yhsRevenue    Bidder_YHS[]
   
   @@unique([network, name])
   @@index([network])
@@ -339,6 +341,65 @@ model Bidder_Yandex {
   @@index([accountId])
 }
 
+// YHS (Searchfor.live) specific revenue data
+// Provider fields: date, linkid (domain), partner_id, geo, initial_searches, feed_searches, monetized_searches, clicks, revenue, coverage, cpc, ctr
+model Bidder_YHS {
+  id String @id @default(cuid())
+
+  // Core fields
+  date       DateTime // Reporting date
+  domain     String?  // Stores linkid (assignment/ownership mapping key)
+  partnerId  Int?
+  geo        String?
+
+  // Provider breakdowns (stand-alone table keeps all data)
+  initialSearches     Int @default(0)
+  feedSearches        Int @default(0)
+  monetizedSearches  Int @default(0)
+
+  // Metrics used by overview
+  impressions Int @default(0) // Equals monetizedSearches (derived at save time)
+  clicks      Int @default(0)
+  ctr          Float?
+  rpm          Float?
+
+  // Revenue
+  grossRevenue Float
+  netRevenue   Float
+  revShare     Float  @default(80)
+  currency     String @default("USD")
+
+  // Extra provider metrics
+  coverage Float?
+  cpc      Float?
+  tq       Float?
+
+  // Metadata
+  status String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Multi-user support
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Multi-account support
+  accountId String?
+  account   NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  // Unique constraint for upsert (prevents duplicates)
+  // Note: domain can be null if provider row is malformed; save logic should generally skip null domains.
+  @@unique([date, domain, partnerId, geo, userId])
+  @@index([date])
+  @@index([userId])
+  @@index([domain])
+  @@index([partnerId])
+  @@index([geo])
+  @@index([accountId])
+}
+
 // Advertiv (Yahoo feed) specific revenue data
 model Bidder_Advertiv {
   id                String   @id @default(cuid())
@@ -450,6 +511,7 @@ model SystemSettings {
   lastSedoSync          DateTime?
   lastYandexSync        DateTime?
   lastAdvertivSync      DateTime?
+  lastYhsSync          DateTime?
   lastDomainSync        DateTime?
   
   // Timestamps

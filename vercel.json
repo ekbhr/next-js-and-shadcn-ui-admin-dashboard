@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/sync-advertiv",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/sync-yhs",
+      "schedule": "0 8 * * *"
     }
   ]
 }

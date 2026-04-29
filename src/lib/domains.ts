@@ -12,12 +12,14 @@
 import { sedoClient } from "./sedo";
 import { yandexClient } from "./yandex";
 import { advertivClient } from "./advertiv";
+import { yhsClient } from "./yhs";
 import { prisma } from "./prisma";
 import { getActiveAccountsWithCredentials } from "./network-accounts";
 import { createSedoClient } from "./sedo";
 import { createYandexClient } from "./yandex";
 import { createAdvertivClient } from "./advertiv";
-import { isSedoCredentials, isYandexCredentials, isAdvertivCredentials } from "./encryption";
+import { createYhsClient } from "./yhs";
+import { isSedoCredentials, isYandexCredentials, isAdvertivCredentials, isYhsCredentials } from "./encryption";
 
 // Types
 export interface NetworkDomain {
@@ -49,7 +51,7 @@ export interface AllNetworksSyncResult {
  * Fetch domains from a specific network
  */
 export async function fetchDomainsFromNetwork(
-  network: "sedo" | "yandex" | "advertiv"
+  network: "sedo" | "yandex" | "advertiv" | "yhs"
 ): Promise<{ success: boolean; domains: NetworkDomain[]; error?: string }> {
   const allDomains: NetworkDomain[] = [];
   const errors: string[] = [];
@@ -99,6 +101,22 @@ export async function fetchDomainsFromNetwork(
             allDomains.push(...result.domains.map((d) => ({
               domain: d.domain,
               network: "advertiv",
+              revenue: d.revenue,
+              impressions: d.impressions,
+              clicks: d.clicks,
+            })));
+          } else {
+            errors.push(`${account.name}: ${result.error}`);
+          }
+        } else if (network === "yhs" && isYhsCredentials(account.credentials)) {
+          const result = await createYhsClient(account.credentials, {
+            accountId: account.id,
+            accountName: account.name,
+          }).getDomains();
+          if (result.success) {
+            allDomains.push(...result.domains.map((d) => ({
+              domain: d.domain,
+              network: "yhs",
               revenue: d.revenue,
               impressions: d.impressions,
               clicks: d.clicks,
@@ -175,6 +193,23 @@ export async function fetchDomainsFromNetwork(
         })),
       };
     }
+    case "yhs": {
+      if (!yhsClient.isConfigured()) {
+        return { success: false, domains: [], error: "YHS not configured" };
+      }
+      const result = await yhsClient.getDomains();
+      if (!result.success) return { success: false, domains: [], error: result.error };
+      return {
+        success: true,
+        domains: result.domains.map((d) => ({
+          domain: d.domain,
+          network: "yhs",
+          revenue: d.revenue,
+          impressions: d.impressions,
+          clicks: d.clicks,
+        })),
+      };
+    }
     default:
       return { success: false, domains: [], error: errors.join("; ") || `Unknown network: ${network}` };
   }
@@ -229,6 +264,19 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
       console.log(`[Domains] Advertiv: ${advertivResult.domains.length} domains`);
     } else {
       errors.push(`Advertiv: ${advertivResult.error}`);
+    }
+  }
+
+  // Fetch from YHS
+  if (yhsClient.isConfigured()) {
+    console.log("[Domains] Fetching from YHS...");
+    const yhsResult = await fetchDomainsFromNetwork("yhs");
+    if (yhsResult.success) {
+      allDomains.push(...yhsResult.domains);
+      byNetwork.yhs = yhsResult.domains;
+      console.log(`[Domains] YHS: ${yhsResult.domains.length} domains`);
+    } else {
+      errors.push(`YHS: ${yhsResult.error}`);
     }
   }
 
@@ -626,6 +674,10 @@ export function getConfiguredNetworks(): string[] {
     networks.push("advertiv");
   }
 
+  if (yhsClient.isConfigured()) {
+    networks.push("yhs");
+  }
+
   return networks;
 }
 
@@ -648,6 +700,10 @@ export function getNetworkStatus(): Record<
     advertiv: {
       configured: advertivClient.isConfigured(),
       name: "Yahoo",
+    },
+    yhs: {
+      configured: yhsClient.isConfigured(),
+      name: "YHS",
     },
   };
 }

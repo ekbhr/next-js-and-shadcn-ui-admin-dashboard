@@ -46,7 +46,7 @@ export interface NetworkAccountSummary {
  * Create a new network account with encrypted credentials.
  */
 export async function createNetworkAccount(
-  network: "sedo" | "yandex" | "advertiv",
+  network: "sedo" | "yandex" | "advertiv" | "yhs",
   name: string,
   credentials: NetworkCredentials,
   isDefault = false
@@ -138,7 +138,7 @@ export async function deleteNetworkAccount(id: string): Promise<void> {
  * Get all accounts for a network (without decrypted credentials).
  */
 export async function getNetworkAccounts(
-  network?: "sedo" | "yandex" | "advertiv"
+  network?: "sedo" | "yandex" | "advertiv" | "yhs"
 ): Promise<NetworkAccountSummary[]> {
   const accounts = await prisma.networkAccount.findMany({
     where: network ? { network } : undefined,
@@ -194,7 +194,7 @@ export async function getNetworkAccountWithCredentials(
  * Used by sync jobs to iterate over accounts.
  */
 export async function getActiveAccountsWithCredentials(
-  network: "sedo" | "yandex" | "advertiv"
+  network: "sedo" | "yandex" | "advertiv" | "yhs"
 ): Promise<NetworkAccountWithCredentials[]> {
   const accounts = await prisma.networkAccount.findMany({
     where: { network, isActive: true },
@@ -217,7 +217,7 @@ export async function getActiveAccountsWithCredentials(
  * Get the default account for a network.
  */
 export async function getDefaultAccount(
-  network: "sedo" | "yandex" | "advertiv"
+  network: "sedo" | "yandex" | "advertiv" | "yhs"
 ): Promise<NetworkAccountWithCredentials | null> {
   const account = await prisma.networkAccount.findFirst({
     where: { network, isDefault: true, isActive: true },
@@ -265,7 +265,7 @@ export async function getDefaultAccount(
  * This is a one-time helper for transitioning from single to multi-account.
  */
 export async function migrateEnvCredentialsToDatabase(
-  network: "sedo" | "yandex" | "advertiv"
+  network: "sedo" | "yandex" | "advertiv" | "yhs"
 ): Promise<{ success: boolean; message: string }> {
   // Check if any accounts already exist
   const existingCount = await prisma.networkAccount.count({
@@ -349,6 +349,29 @@ export async function migrateEnvCredentialsToDatabase(
       return {
         success: true,
         message: "Successfully migrated Advertiv credentials to database.",
+      };
+    }
+
+    if (network === "yhs") {
+      const apiKey = process.env.YHS_API_KEY;
+
+      if (!apiKey) {
+        return {
+          success: false,
+          message: "Missing YHS_API_KEY environment variable. Cannot migrate.",
+        };
+      }
+
+      await createNetworkAccount(
+        "yhs",
+        "Primary YHS Account",
+        { apiKey },
+        true // Set as default
+      );
+
+      return {
+        success: true,
+        message: "Successfully migrated YHS credentials to database.",
       };
     }
     

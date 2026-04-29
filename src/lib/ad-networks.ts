@@ -173,6 +173,38 @@ export const AD_NETWORKS: Record<string, AdNetwork> = {
     envVar: "ADVERTIV_API_KEY",
   },
 
+  yhs: {
+    id: "yhs",
+    name: "YHS",
+    shortName: "YHS",
+    description: "Searchfor.live reporting JSON feed",
+    currency: "USD",
+    paymentTerms: "Monthly",
+    minPayout: 0,
+    colors: {
+      primary: "#0EA5E9",
+      text: "text-sky-700",
+      bg: "bg-sky-50",
+      border: "border-sky-200",
+      badge: "bg-sky-100 text-sky-800 hover:bg-sky-200",
+      outlineBadge: "bg-sky-50 text-sky-700 border-sky-200",
+    },
+    features: {
+      revenue: true,
+      domains: true,
+      tags: false,
+      dailyBreakdown: true,
+      realtime: false,
+    },
+    api: {
+      baseUrl: "https://a.searchfor.live",
+      authType: "apiKey",
+      docsUrl: "https://a.searchfor.live",
+    },
+    status: "active",
+    envVar: "YHS_API_KEY",
+  },
+
   // ============================================
   // FUTURE NETWORKS (Templates)
   // ============================================

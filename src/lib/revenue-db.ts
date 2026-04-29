@@ -12,6 +12,7 @@ import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
 import type { SedoRevenueData } from "@/lib/sedo";
 import type { YandexRevenueData } from "@/lib/yandex";
 import type { AdvertivRevenueData } from "@/lib/advertiv";
+import type { YhsRevenueData } from "@/lib/yhs";
 
 // Default revShare if no assignment found
 const DEFAULT_REV_SHARE = 80;
@@ -1712,12 +1713,13 @@ export async function getLastSyncTime(userId?: string): Promise<{
   sedo: Date | null;
   yandex: Date | null;
   advertiv: Date | null;
+  yhs: Date | null;
   overall: Date | null;
 }> {
   const where = userId ? { userId } : {};
 
   // Get most recent updatedAt for each network
-  const [sedoRecord, yandexRecord, advertivRecord] = await Promise.all([
+  const [sedoRecord, yandexRecord, advertivRecord, yhsRecord] = await Promise.all([
     prisma.bidder_Sedo.findFirst({
       where,
       orderBy: { updatedAt: "desc" },
@@ -1733,12 +1735,18 @@ export async function getLastSyncTime(userId?: string): Promise<{
       orderBy: { updatedAt: "desc" },
       select: { updatedAt: true },
     }),
+    prisma.bidder_YHS.findFirst({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: { updatedAt: true },
+    }),
   ]);
 
   const sedoTime = sedoRecord?.updatedAt || null;
   const yandexTime = yandexRecord?.updatedAt || null;
   const advertivTime = advertivRecord?.updatedAt || null;
-  const overall = [sedoTime, yandexTime, advertivTime]
+  const yhsTime = yhsRecord?.updatedAt || null;
+  const overall = [sedoTime, yandexTime, advertivTime, yhsTime]
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => b.getTime() - a.getTime())[0] || null;
 
@@ -1746,6 +1754,7 @@ export async function getLastSyncTime(userId?: string): Promise<{
     sedo: sedoTime,
     yandex: yandexTime,
     advertiv: advertivTime,
+    yhs: yhsTime,
     overall,
   };
 }
@@ -1758,12 +1767,14 @@ export async function getSyncStatus(userId?: string): Promise<{
     sedo: Date | null;
     yandex: Date | null;
     advertiv: Date | null;
+    yhs: Date | null;
     overall: Date | null;
   };
   recordCounts: {
     sedo: number;
     yandex: number;
     advertiv: number;
+    yhs: number;
     overview: number;
   };
 }> {
@@ -1772,11 +1783,12 @@ export async function getSyncStatus(userId?: string): Promise<{
     async () => {
       const where = userId ? { userId } : {};
 
-      const [lastSync, sedoCount, yandexCount, advertivCount, overviewCount] = await Promise.all([
+      const [lastSync, sedoCount, yandexCount, advertivCount, yhsCount, overviewCount] = await Promise.all([
         getLastSyncTime(userId),
         prisma.bidder_Sedo.count({ where }),
         prisma.bidder_Yandex.count({ where }),
         prisma.bidder_Advertiv.count({ where }),
+        prisma.bidder_YHS.count({ where }),
         prisma.overview_Report.count({ where }),
       ]);
 
@@ -1786,11 +1798,319 @@ export async function getSyncStatus(userId?: string): Promise<{
           sedo: sedoCount,
           yandex: yandexCount,
           advertiv: advertivCount,
+          yhs: yhsCount,
           overview: overviewCount,
         },
       };
     },
     CacheTTL.SHORT // 30 seconds
   );
+}
+
+// ============================================
+// YHS (Searchfor.live) REVENUE FUNCTIONS
+// ============================================
+
+/**
+ * Save YHS revenue data to database (upsert).
+ *
+ * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN (linkid) based on Domain_Assignment.
+ */
+export async function saveYhsRevenue(
+  data: YhsRevenueData[],
+  fallbackUserId: string,
+  options: { saveToDomainOwner?: boolean; filterByAssignedDomains?: boolean; accountId?: string } = {},
+): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
+  let saved = 0;
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  const saveToDomainOwner = options.saveToDomainOwner !== false;
+  const domainAssignments = await getAllDomainAssignmentsMap("yhs");
+
+  for (const item of data) {
+    try {
+      const domainValue = item.domain || null;
+      const normalizedDomain = domainValue?.toLowerCase().trim() || null;
+
+      if (!normalizedDomain) {
+        skipped++;
+        continue;
+      }
+
+      let targetUserId = fallbackUserId;
+      let revShare = DEFAULT_REV_SHARE;
+
+      if (saveToDomainOwner) {
+        const assignment = domainAssignments.get(normalizedDomain);
+        if (assignment) {
+          targetUserId = assignment.userId;
+          revShare = assignment.revShare;
+        } else if (options.filterByAssignedDomains) {
+          skipped++;
+          continue;
+        }
+      } else if (options.filterByAssignedDomains && !normalizedDomain) {
+        skipped++;
+        continue;
+      }
+
+      const netRevenue = calculateNetRevenue(item.revenue ?? 0, revShare);
+      const date = new Date(item.date);
+      date.setUTCHours(0, 0, 0, 0);
+
+      const partnerId = item.partnerId ?? null;
+      const geo = item.geo ?? null;
+
+      const recordData = {
+        date,
+        domain: normalizedDomain,
+        partnerId,
+        geo,
+
+        initialSearches: item.initialSearches ?? 0,
+        feedSearches: item.feedSearches ?? 0,
+        monetizedSearches: item.monetizedSearches ?? 0,
+
+        impressions: item.monetizedSearches ?? 0,
+        clicks: item.clicks ?? 0,
+
+        ctr: item.ctr ?? null,
+        rpm: null,
+
+        grossRevenue: item.revenue ?? 0,
+        netRevenue,
+        revShare,
+        currency: "USD",
+
+        coverage: item.coverage ?? null,
+        cpc: item.cpc ?? null,
+        tq: item.tq ?? null,
+
+        status: "Estimated",
+        userId: targetUserId,
+        accountId: options.accountId || null,
+      };
+
+      const existing = await prisma.bidder_YHS.findFirst({
+        where: {
+          date,
+          domain: normalizedDomain,
+          partnerId,
+          geo,
+          userId: targetUserId,
+        },
+      });
+
+      if (existing) {
+        await prisma.bidder_YHS.update({
+          where: { id: existing.id },
+          data: recordData,
+        });
+        updated++;
+      } else {
+        const existingOtherUser = await prisma.bidder_YHS.findFirst({
+          where: {
+            date,
+            domain: normalizedDomain,
+            partnerId,
+            geo,
+          },
+        });
+
+        if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
+          await prisma.bidder_YHS.update({
+            where: { id: existingOtherUser.id },
+            data: { userId: targetUserId, ...recordData },
+          });
+          updated++;
+        } else if (!existingOtherUser) {
+          await prisma.bidder_YHS.create({
+            data: {
+              ...recordData,
+            },
+          });
+          saved++;
+        } else {
+          updated++;
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Failed to save ${item.date} ${item.domain}: ${errorMsg}`);
+      console.error("[Revenue DB] YHS error:", error);
+    }
+  }
+
+  // Invalidate dashboard cache after sync
+  cache.invalidatePrefix("dashboard:");
+  cache.invalidatePrefix("sync-status:");
+
+  return { saved, updated, skipped, errors };
+}
+
+export async function getYhsRevenue(
+  userId: string,
+  options: {
+    startDate?: Date;
+    endDate?: Date;
+    domain?: string;
+    limit?: number;
+  } = {},
+) {
+  const { startDate, endDate, domain, limit } = options;
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  if (domain) where.domain = domain;
+
+  return prisma.bidder_YHS.findMany({
+    where,
+    orderBy: { date: "asc" },
+    take: limit,
+  });
+}
+
+export async function getYhsRevenueSummary(
+  userId: string,
+  options: { startDate?: Date; endDate?: Date } = {},
+) {
+  const { startDate, endDate } = options;
+  const where: Record<string, unknown> = { userId };
+
+  if (startDate || endDate) {
+    where.date = {};
+    if (startDate) (where.date as Record<string, Date>).gte = startDate;
+    if (endDate) (where.date as Record<string, Date>).lte = endDate;
+  }
+
+  const result = await prisma.bidder_YHS.aggregate({
+    where,
+    _sum: {
+      grossRevenue: true,
+      netRevenue: true,
+      impressions: true,
+      clicks: true,
+    },
+    _count: true,
+  });
+
+  return {
+    totalGrossRevenue: result._sum.grossRevenue || 0,
+    totalNetRevenue: result._sum.netRevenue || 0,
+    totalImpressions: result._sum.impressions || 0,
+    totalClicks: result._sum.clicks || 0,
+    recordCount: result._count,
+  };
+}
+
+/**
+ * Sync YHS bidder table into Overview_Report.
+ * Overview uses monetized_searches (stored as impressions) as its impressions basis.
+ */
+export async function syncYhsToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
+  let synced = 0;
+  const errors: string[] = [];
+
+  try {
+    const yhsData = await prisma.bidder_YHS.findMany({
+      where: userId ? { userId } : undefined,
+    });
+
+    const grouped = new Map<string, {
+      userId: string;
+      date: Date;
+      domain: string | null;
+      grossRevenue: number;
+      netRevenue: number;
+      impressions: number;
+      clicks: number;
+    }>();
+
+    for (const record of yhsData) {
+      const key = `${record.userId}_${record.date.toISOString().split("T")[0]}_${record.domain || "all"}`;
+
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.grossRevenue += record.grossRevenue;
+        existing.netRevenue += record.netRevenue;
+        existing.impressions += record.impressions;
+        existing.clicks += record.clicks;
+      } else {
+        grouped.set(key, {
+          userId: record.userId,
+          date: record.date,
+          domain: record.domain,
+          grossRevenue: record.grossRevenue,
+          netRevenue: record.netRevenue,
+          impressions: record.impressions,
+          clicks: record.clicks,
+        });
+      }
+    }
+
+    for (const [, data] of grouped) {
+      try {
+        const ctr = data.impressions > 0
+          ? Math.round((data.clicks / data.impressions) * 10000) / 100
+          : null;
+
+        const rpm = data.impressions > 0
+          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100
+          : null;
+
+        const recordData = {
+          grossRevenue: data.grossRevenue,
+          netRevenue: data.netRevenue,
+          impressions: data.impressions,
+          clicks: data.clicks,
+          ctr,
+          rpm,
+        };
+
+        const existing = await prisma.overview_Report.findFirst({
+          where: {
+            date: data.date,
+            network: "yhs",
+            domain: data.domain,
+            userId: data.userId,
+          },
+        });
+
+        if (existing) {
+          await prisma.overview_Report.update({
+            where: { id: existing.id },
+            data: recordData,
+          });
+        } else {
+          await prisma.overview_Report.create({
+            data: {
+              date: data.date,
+              network: "yhs",
+              domain: data.domain,
+              currency: "USD",
+              userId: data.userId,
+              ...recordData,
+            },
+          });
+        }
+
+        synced++;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
+      }
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "Unknown error");
+  }
+
+  return { synced, errors };
 }
 

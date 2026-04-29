@@ -109,6 +109,12 @@ export const sidebarItems: NavGroup[] = [
         icon: Network,
         adminOnly: true,
       },
+      {
+        title: "YHS",
+        url: "/dashboard/admin/reports/yhs",
+        icon: Network,
+        adminOnly: true,
+      },
     ],
   },
   {
