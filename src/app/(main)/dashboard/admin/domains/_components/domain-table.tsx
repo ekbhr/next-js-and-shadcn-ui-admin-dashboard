@@ -8,7 +8,7 @@
  * One domain = One user
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -32,6 +32,7 @@ import {
 import { Pencil, Check, X, Loader2, User, Users, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
+import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
 
 interface DomainAssignment {
   id: string;
@@ -215,6 +216,16 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
 
   const isAllSelected = assignments.length > 0 && selectedIds.size === assignments.length;
   const isSomeSelected = selectedIds.size > 0 && selectedIds.size < assignments.length;
+  const aliasMap = useMemo(
+    () =>
+      buildAdvertivAliasMap(
+        assignments.map((a) => ({
+          network: a.network,
+          domain: a.domain,
+        })),
+      ),
+    [assignments],
+  );
 
   return (
     <Card>
@@ -325,11 +336,11 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                   <Checkbox
                     checked={selectedIds.has(assignment.id)}
                     onCheckedChange={() => toggleSelection(assignment.id)}
-                    aria-label={`Select ${assignment.domain}`}
+                    aria-label={`Select ${maskAdvertivDomain(assignment.network, assignment.domain, aliasMap) || assignment.domain}`}
                   />
                 </TableCell>
                 <TableCell className="font-medium">
-                  {assignment.domain}
+                  {maskAdvertivDomain(assignment.network, assignment.domain, aliasMap) || assignment.domain}
                 </TableCell>
                 <TableCell>
                   <Badge className={getNetworkColors(assignment.network).badge}>
