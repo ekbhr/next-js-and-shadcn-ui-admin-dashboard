@@ -228,8 +228,21 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
   const byNetwork: Record<string, NetworkDomain[]> = {};
   const errors: string[] = [];
 
+  // Include networks configured via DB accounts OR env vars.
+  const [sedoAccounts, yandexAccounts, advertivAccounts, yhsAccounts] = await Promise.all([
+    getActiveAccountsWithCredentials("sedo"),
+    getActiveAccountsWithCredentials("yandex"),
+    getActiveAccountsWithCredentials("advertiv"),
+    getActiveAccountsWithCredentials("yhs"),
+  ]);
+
+  const shouldFetchSedo = sedoAccounts.length > 0 || sedoClient.isConfigured();
+  const shouldFetchYandex = yandexAccounts.length > 0 || yandexClient.isConfigured();
+  const shouldFetchAdvertiv = advertivAccounts.length > 0 || advertivClient.isConfigured();
+  const shouldFetchYhs = yhsAccounts.length > 0 || yhsClient.isConfigured();
+
   // Fetch from Sedo
-  if (sedoClient.isConfigured()) {
+  if (shouldFetchSedo) {
     console.log("[Domains] Fetching from Sedo...");
     const sedoResult = await fetchDomainsFromNetwork("sedo");
     if (sedoResult.success) {
@@ -242,7 +255,7 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
   }
 
   // Fetch from Yandex
-  if (yandexClient.isConfigured()) {
+  if (shouldFetchYandex) {
     console.log("[Domains] Fetching from Yandex...");
     const yandexResult = await fetchDomainsFromNetwork("yandex");
     if (yandexResult.success) {
@@ -255,7 +268,7 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
   }
 
   // Fetch from Advertiv
-  if (advertivClient.isConfigured()) {
+  if (shouldFetchAdvertiv) {
     console.log("[Domains] Fetching from Advertiv...");
     const advertivResult = await fetchDomainsFromNetwork("advertiv");
     if (advertivResult.success) {
@@ -268,7 +281,7 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
   }
 
   // Fetch from YHS
-  if (yhsClient.isConfigured()) {
+  if (shouldFetchYhs) {
     console.log("[Domains] Fetching from YHS...");
     const yhsResult = await fetchDomainsFromNetwork("yhs");
     if (yhsResult.success) {
