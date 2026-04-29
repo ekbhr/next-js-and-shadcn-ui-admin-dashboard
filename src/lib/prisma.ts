@@ -14,7 +14,13 @@ const createPrismaClient = () => {
     throw new Error("DATABASE_URL or POSTGRES_URL must be set");
   }
 
-  const pool = new Pool({ connectionString });
+  const poolMax = Number(process.env.PG_POOL_MAX || 3);
+  const pool = new Pool({
+    connectionString,
+    max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 3,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
   const adapter = new PrismaPg(pool);
   
   return new PrismaClient({ adapter });
