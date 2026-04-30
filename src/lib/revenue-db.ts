@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
+import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
 import type { SedoRevenueData } from "@/lib/sedo";
 import type { YandexRevenueData } from "@/lib/yandex";
 import type { AdvertivRevenueData } from "@/lib/advertiv";
@@ -801,21 +802,16 @@ async function getDashboardSummaryImpl(
     clicks: n._sum.clicks || 0,
   }));
 
-  // Format top domains
-  const advertivDomains = topDomainsAgg
-    .filter((d) => d.network === "advertiv" && d.domain)
-    .map((d) => d.domain as string)
-    .sort((a, b) => a.localeCompare(b));
-  const advertivAliasMap = new Map<string, string>();
-  advertivDomains.forEach((domain, index) => {
-    advertivAliasMap.set(domain, `YH_Feed_${index + 1}`);
-  });
+  // Format top domains (apply Yahoo/YHS alias masking for display consistency)
+  const aliasMap = buildAdvertivAliasMap(
+    topDomainsAgg.map((d) => ({
+      network: d.network,
+      domain: d.domain,
+    })),
+  );
 
   const topDomains = topDomainsAgg.map((d) => ({
-    domain:
-      d.network === "advertiv" && d.domain
-        ? advertivAliasMap.get(d.domain) || d.domain
-        : d.domain || "All Domains",
+    domain: maskAdvertivDomain(d.network, d.domain, aliasMap) || "All Domains",
     grossRevenue: d._sum.grossRevenue || 0,
     netRevenue: d._sum.netRevenue || 0,
   }));
