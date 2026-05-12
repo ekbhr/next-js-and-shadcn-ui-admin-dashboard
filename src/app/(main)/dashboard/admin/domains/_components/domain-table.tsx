@@ -319,6 +319,7 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                 />
               </TableHead>
               <TableHead>Domain</TableHead>
+              <TableHead>Raw ID</TableHead>
               <TableHead>Network</TableHead>
               <TableHead>Assigned To</TableHead>
               <TableHead className="text-center">RevShare %</TableHead>
@@ -341,6 +342,12 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                 </TableCell>
                 <TableCell className="font-medium">
                   {maskAdvertivDomain(assignment.network, assignment.domain, aliasMap) || assignment.domain}
+                </TableCell>
+                <TableCell
+                  className="max-w-[240px] font-mono text-xs text-muted-foreground break-all"
+                  title={assignment.domain}
+                >
+                  {assignment.domain}
                 </TableCell>
                 <TableCell>
                   <Badge className={getNetworkColors(assignment.network).badge}>
