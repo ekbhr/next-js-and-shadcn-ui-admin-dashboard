@@ -12,16 +12,13 @@ function segment(value: string | null | undefined): string {
   return t;
 }
 
-/** Yahoo feed: YH_Feed_<SubId>_<CampaignId>. When campaign is unknown, repeat SubId in that slot (no N/A). */
+/** Yahoo (Advertiv): YH_Feed_<SubID> — campaign is not part of the display label. */
 export function formatYahooFeedDomainLabel(
   subId: string | null | undefined,
-  campaignId?: string | null,
+  _campaignId?: string | null,
 ): string | null {
   if (!subId?.trim()) return null;
-  const s = segment(subId);
-  const c = segment(campaignId);
-  const campaignSlot = c === NA ? s : c;
-  return `YH_Feed_${s}_${campaignSlot}`;
+  return `YH_Feed_${segment(subId)}`;
 }
 
 /** YHS feed: YHS_Feed_<LinkId> */
