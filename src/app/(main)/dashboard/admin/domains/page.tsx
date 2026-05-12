@@ -81,6 +81,7 @@ export default async function DomainsPage() {
       updatedAt: a.updatedAt,
       partnerId: ids.partnerId,
       campaignId: ids.campaignId,
+      subId: ids.subId,
       linkId: ids.linkId,
     };
   });

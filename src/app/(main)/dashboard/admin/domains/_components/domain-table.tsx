@@ -50,7 +50,9 @@ interface DomainAssignment {
   partnerId: string;
   /** Display-only: Campaign ID (Yahoo when known) */
   campaignId: string;
-  /** Display-only: Link ID (YHS assignment key) */
+  /** Display-only: Sub ID (Yahoo sub_id key; N/A elsewhere unless applicable) */
+  subId: string;
+  /** Display-only: Link ID (YHS link id; Yahoo shows same key as sub when no separate link) */
   linkId: string;
 }
 
@@ -317,6 +319,7 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
               <TableHead>Raw ID</TableHead>
               <TableHead className="whitespace-nowrap">Partner ID</TableHead>
               <TableHead className="whitespace-nowrap">Campaign ID</TableHead>
+              <TableHead className="whitespace-nowrap">Sub ID</TableHead>
               <TableHead className="whitespace-nowrap">Link ID</TableHead>
               <TableHead>Network</TableHead>
               <TableHead>Assigned To</TableHead>
@@ -358,6 +361,9 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                 </TableCell>
                 <TableCell className="max-w-[160px] font-mono text-xs text-muted-foreground break-all">
                   <span title={assignment.campaignId}>{assignment.campaignId}</span>
+                </TableCell>
+                <TableCell className="max-w-[160px] font-mono text-xs text-muted-foreground break-all">
+                  <span title={assignment.subId}>{assignment.subId}</span>
                 </TableCell>
                 <TableCell className="max-w-[160px] font-mono text-xs text-muted-foreground break-all">
                   <span title={assignment.linkId}>{assignment.linkId}</span>
