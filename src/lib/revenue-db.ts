@@ -605,7 +605,7 @@ async function getDashboardSummaryImpl(
     advertivDaily,
     yhsDaily,
     yandexTopDomains,
-    advertivTopDomains,
+    advertivTopSubCampaign,
     yhsTopDomains,
   ] = await Promise.all([
     prisma.overview_Report.aggregate({
@@ -683,18 +683,20 @@ async function getDashboardSummaryImpl(
       take: 5,
     }),
     prisma.bidder_Advertiv.groupBy({
-      by: ["domain"],
+      by: ["domain", "campaignId"],
       where: whereClause,
       _sum: {
         grossRevenue: true,
         netRevenue: true,
+        impressions: true,
+        clicks: true,
       },
       orderBy: {
         _sum: {
           grossRevenue: "desc",
         },
       },
-      take: 5,
+      take: 25,
     }),
     prisma.bidder_YHS.groupBy({
       by: ["domain"],
@@ -825,6 +827,19 @@ async function getDashboardSummaryImpl(
     net: number;
   };
 
+  const yahooByCampaign = advertivTopSubCampaign.map((d) => ({
+    subId: d.domain || "",
+    campaignId: d.campaignId,
+    label:
+      maskAdvertivDomain("advertiv", d.domain, undefined) ||
+      d.domain ||
+      "—",
+    grossRevenue: Math.round((d._sum.grossRevenue || 0) * 100) / 100,
+    netRevenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
+    impressions: d._sum.impressions || 0,
+    clicks: d._sum.clicks || 0,
+  }));
+
   const topCombined: TopAgg[] = [
     ...yandexTopDomains.map((d) => ({
       network: d.network || "yandex",
@@ -832,10 +847,10 @@ async function getDashboardSummaryImpl(
       gross: d._sum.grossRevenue || 0,
       net: d._sum.netRevenue || 0,
     })),
-    ...advertivTopDomains.map((d) => ({
+    ...advertivTopSubCampaign.slice(0, 12).map((d) => ({
       network: "advertiv",
       domain: d.domain,
-      campaignId: null as string | null,
+      campaignId: d.campaignId,
       gross: d._sum.grossRevenue || 0,
       net: d._sum.netRevenue || 0,
     })),
@@ -851,9 +866,13 @@ async function getDashboardSummaryImpl(
   const topDomainsAgg = topCombined.slice(0, 5);
 
   const topDomains = topDomainsAgg.map((d) => ({
-    domain:
-      maskAdvertivDomain(d.network, d.domain, undefined, { campaignId: d.campaignId }) ||
-      "All Domains",
+    domain: maskAdvertivDomain(d.network, d.domain, undefined) || "All Domains",
+    subtitle:
+      d.network === "advertiv"
+        ? d.campaignId != null && String(d.campaignId).trim() !== ""
+          ? `Campaign: ${d.campaignId}`
+          : "Campaign: —"
+        : undefined,
     grossRevenue: d.gross,
     netRevenue: d.net,
   }));
@@ -868,6 +887,7 @@ async function getDashboardSummaryImpl(
     byNetwork,
     dailyData: dailyDataFormatted,
     topDomains,
+    yahooByCampaign,
   };
 }
 

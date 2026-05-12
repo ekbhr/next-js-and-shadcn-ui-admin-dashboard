@@ -18,6 +18,7 @@ import { canViewGrossRevenue, isAdmin } from "@/lib/roles";
 import { DashboardCards } from "./_components/dashboard-cards";
 import { DashboardChart } from "./_components/dashboard-chart";
 import { TopDomains } from "./_components/top-domains";
+import { YahooCampaignBreakdown } from "./_components/yahoo-campaign-breakdown";
 import { PeriodToggle } from "./_components/period-toggle";
 import { SyncStatus } from "./_components/sync-status";
 
@@ -76,13 +77,17 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         showGrossRevenue={showGrossRevenue} 
       />
 
-      {/* Chart and Top Domains */}
+      {/* Chart and side panels */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <DashboardChart dailyData={data.dailyData} showGrossRevenue={showGrossRevenue} />
         </div>
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 flex flex-col gap-4">
           <TopDomains domains={data.topDomains} showGrossRevenue={showGrossRevenue} />
+          <YahooCampaignBreakdown
+            rows={data.yahooByCampaign}
+            showGrossRevenue={showGrossRevenue}
+          />
         </div>
       </div>
     </div>

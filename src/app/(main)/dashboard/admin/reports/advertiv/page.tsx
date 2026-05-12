@@ -32,7 +32,7 @@ export default async function AdminAdvertivReportPage() {
     },
   };
 
-  const [summary, reports] = await Promise.all([
+  const [summary, reports, byCampaign] = await Promise.all([
     prisma.bidder_Advertiv.aggregate({
       where,
       _sum: {
@@ -54,6 +54,22 @@ export default async function AdminAdvertivReportPage() {
       },
       orderBy: [{ date: "desc" }, { grossRevenue: "desc" }],
       take: 200,
+    }),
+    prisma.bidder_Advertiv.groupBy({
+      by: ["campaignId"],
+      where,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+      take: 40,
     }),
   ]);
 
@@ -90,6 +106,43 @@ export default async function AdminAdvertivReportPage() {
           </CardHeader>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Totals by campaign</CardTitle>
+          <CardDescription>
+            Aggregated gross / net for the period (all users, all countries per campaign id)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="py-2 pr-3">Campaign ID</th>
+                <th className="py-2 pr-3 text-right">Gross</th>
+                <th className="py-2 pr-3 text-right">Net</th>
+                <th className="py-2 pr-3 text-right">Clicks</th>
+                <th className="py-2 pr-3 text-right">Impressions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byCampaign.map((row) => (
+                <tr key={row.campaignId ?? "null"} className="border-b">
+                  <td className="py-2 pr-3 font-mono text-xs">
+                    {row.campaignId != null && String(row.campaignId).trim() !== ""
+                      ? String(row.campaignId)
+                      : "—"}
+                  </td>
+                  <td className="py-2 pr-3 text-right">${(row._sum.grossRevenue || 0).toFixed(2)}</td>
+                  <td className="py-2 pr-3 text-right">${(row._sum.netRevenue || 0).toFixed(2)}</td>
+                  <td className="py-2 pr-3 text-right">{(row._sum.clicks || 0).toLocaleString()}</td>
+                  <td className="py-2 pr-3 text-right">{(row._sum.impressions || 0).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

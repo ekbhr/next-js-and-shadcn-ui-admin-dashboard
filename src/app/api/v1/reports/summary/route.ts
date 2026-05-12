@@ -9,6 +9,7 @@
  * - startDate: YYYY-MM-DD (default: 30 days ago)
  * - endDate: YYYY-MM-DD (default: today)
  * - groupBy: day | domain | network (default: none - returns grand total)
+ *   For domain, Yahoo rows include campaignId (one row per sub + campaign).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -110,29 +111,6 @@ export async function GET(request: NextRequest) {
     ) => {
       for (const d of rows) {
         const key = d.date.toISOString().split("T")[0];
-        const prev = into.get(key);
-        const rev = d._sum.netRevenue || 0;
-        const imp = d._sum.impressions || 0;
-        const clk = d._sum.clicks || 0;
-        if (prev) {
-          prev.revenue += rev;
-          prev.impressions += imp;
-          prev.clicks += clk;
-        } else {
-          into.set(key, { revenue: rev, impressions: imp, clicks: clk });
-        }
-      }
-    };
-
-    const mergeDomainMap = (
-      rows: Array<{
-        domain: string | null;
-        _sum: { netRevenue: number | null; impressions: number | null; clicks: number | null };
-      }>,
-      into: Map<string, { revenue: number; impressions: number; clicks: number }>,
-    ) => {
-      for (const d of rows) {
-        const key = d.domain || "Unknown";
         const prev = into.get(key);
         const rev = d._sum.netRevenue || 0;
         const imp = d._sum.impressions || 0;
@@ -266,9 +244,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Group by domain
+    // Group by domain (Yahoo / Advertiv split by campaign so each row is one sub + campaign)
     if (groupBy === "domain") {
-      const [yandexDomain, advertivDomain, yhsDomain] = await Promise.all([
+      const [yandexDomain, advertivByCampaign, yhsDomain] = await Promise.all([
         prisma.overview_Report.groupBy({
           by: ["domain"],
           where: yandexWhere,
@@ -279,7 +257,7 @@ export async function GET(request: NextRequest) {
           },
         }),
         prisma.bidder_Advertiv.groupBy({
-          by: ["domain"],
+          by: ["domain", "campaignId"],
           where: whereClause,
           _sum: {
             netRevenue: true,
@@ -298,24 +276,56 @@ export async function GET(request: NextRequest) {
         }),
       ]);
 
-      const domainMap = new Map<string, { revenue: number; impressions: number; clicks: number }>();
-      mergeDomainMap(yandexDomain, domainMap);
-      mergeDomainMap(advertivDomain, domainMap);
-      mergeDomainMap(yhsDomain, domainMap);
+      type DomainRow = {
+        network: string;
+        domain: string;
+        campaignId: string | null;
+        revenue: number;
+        impressions: number;
+        clicks: number;
+      };
 
-      const data = Array.from(domainMap.entries())
-        .map(([domainKey, v]) => ({
-          domain: domainKey,
-          revenue: Math.round(v.revenue * 100) / 100,
-          impressions: v.impressions,
-          clicks: v.clicks,
-        }))
-        .sort((a, b) => b.revenue - a.revenue);
+      const rows: DomainRow[] = [];
+
+      for (const d of yandexDomain) {
+        rows.push({
+          network: "yandex",
+          domain: d.domain || "Unknown",
+          campaignId: null,
+          revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
+          impressions: d._sum.impressions || 0,
+          clicks: d._sum.clicks || 0,
+        });
+      }
+
+      for (const d of advertivByCampaign) {
+        rows.push({
+          network: "advertiv",
+          domain: d.domain || "Unknown",
+          campaignId: d.campaignId,
+          revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
+          impressions: d._sum.impressions || 0,
+          clicks: d._sum.clicks || 0,
+        });
+      }
+
+      for (const d of yhsDomain) {
+        rows.push({
+          network: "yhs",
+          domain: d.domain || "Unknown",
+          campaignId: null,
+          revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
+          impressions: d._sum.impressions || 0,
+          clicks: d._sum.clicks || 0,
+        });
+      }
+
+      rows.sort((a, b) => b.revenue - a.revenue);
 
       return NextResponse.json(
         {
           success: true,
-          data,
+          data: rows,
           period: {
             startDate: startDate.toISOString().split("T")[0],
             endDate: endDate.toISOString().split("T")[0],

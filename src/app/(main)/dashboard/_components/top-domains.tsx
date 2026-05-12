@@ -11,6 +11,7 @@ import { Globe } from "lucide-react";
 interface TopDomainsProps {
   domains: Array<{
     domain: string;
+    subtitle?: string;
     grossRevenue: number;
     netRevenue: number;
   }>;
@@ -45,7 +46,10 @@ export function TopDomains({ domains, showGrossRevenue = false }: TopDomainsProp
       <CardContent>
         <div className="space-y-4">
           {domains.map((domain, index) => (
-            <div key={domain.domain} className="flex items-center justify-between">
+            <div
+              key={`${domain.domain}-${domain.subtitle ?? ""}-${index}`}
+              className="flex items-center justify-between"
+            >
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
                   {index + 1}
@@ -54,6 +58,11 @@ export function TopDomains({ domains, showGrossRevenue = false }: TopDomainsProp
                   <p className="font-medium text-sm truncate max-w-[150px]">
                     {domain.domain}
                   </p>
+                  {domain.subtitle ? (
+                    <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                      {domain.subtitle}
+                    </p>
+                  ) : null}
                   {showGrossRevenue && (
                     <p className="text-xs text-muted-foreground">
                       Net: ${domain.netRevenue.toFixed(2)}
