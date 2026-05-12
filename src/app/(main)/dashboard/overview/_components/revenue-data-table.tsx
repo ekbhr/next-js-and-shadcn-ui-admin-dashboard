@@ -62,6 +62,8 @@ interface RevenueRecord {
   date: Date;
   network: string;
   domain: string | null;
+  /** Yahoo (Advertiv) only */
+  campaignId?: string | null;
   grossRevenue: number;
   netRevenue: number;
   impressions: number;
@@ -133,7 +135,7 @@ const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] =>
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="max-w-[200px] truncate">
+        <div className="max-w-[220px] truncate font-medium" title={row.original.domain || ""}>
           {row.original.domain || "All Domains"}
         </div>
       ),
@@ -141,6 +143,20 @@ const createColumns = (showGrossRevenue: boolean): ColumnDef<RevenueRecord>[] =>
         const domain = row.original.domain || "All Domains";
         return domain.toLowerCase().includes(value.toLowerCase());
       },
+    },
+    {
+      id: "campaignId",
+      accessorFn: (row) => row.campaignId ?? "",
+      header: "Campaign ID",
+      cell: ({ row }) => (
+        <div className="max-w-[140px] truncate font-mono text-xs text-muted-foreground">
+          {row.original.network === "advertiv" &&
+          row.original.campaignId != null &&
+          String(row.original.campaignId).trim() !== ""
+            ? String(row.original.campaignId)
+            : "—"}
+        </div>
+      ),
     },
     {
       accessorKey: "impressions",
@@ -277,6 +293,12 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
       ...row.original,
       date: new Date(row.original.date).toISOString().split("T")[0],
       domain: row.original.domain || "All Domains",
+      campaignId:
+        row.original.network === "advertiv" &&
+        row.original.campaignId != null &&
+        String(row.original.campaignId).trim() !== ""
+          ? String(row.original.campaignId)
+          : "",
     }));
 
     type ExportColumn = { key: keyof typeof filteredData[0]; header: string };
@@ -284,6 +306,7 @@ export function RevenueDataTable({ data, showGrossRevenue = false }: RevenueData
       { key: "date", header: "Date" },
       { key: "network", header: "Network" },
       { key: "domain", header: "Domain" },
+      { key: "campaignId", header: "Campaign ID" },
       { key: "impressions", header: "Impressions" },
       { key: "clicks", header: "Clicks" },
       { key: "ctr", header: "CTR %" },

@@ -12,13 +12,13 @@ function segment(value: string | null | undefined): string {
   return t;
 }
 
-/** Yahoo (Advertiv): YH_Feed_<SubID> — campaign is not part of the display label. */
+/** Yahoo (Advertiv): YH_Feed_<SubID>_<CampaignID>. Missing campaign shows N/A. */
 export function formatYahooFeedDomainLabel(
   subId: string | null | undefined,
-  _campaignId?: string | null,
+  campaignId?: string | null,
 ): string | null {
   if (!subId?.trim()) return null;
-  return `YH_Feed_${segment(subId)}`;
+  return `YH_Feed_${segment(subId)}_${segment(campaignId)}`;
 }
 
 /** YHS feed: YHS_Feed_<LinkId> */

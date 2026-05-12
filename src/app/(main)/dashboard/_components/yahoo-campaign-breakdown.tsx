@@ -47,14 +47,8 @@ export function YahooCampaignBreakdown({
               className="flex items-start justify-between gap-2 border-b border-border/60 pb-3 last:border-0 last:pb-0"
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium truncate" title={row.subId}>
+                <p className="font-medium truncate" title={`${row.subId} / ${row.campaignId ?? ""}`}>
                   {row.label}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  Campaign:{" "}
-                  {row.campaignId != null && String(row.campaignId).trim() !== ""
-                    ? String(row.campaignId)
-                    : "—"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {row.impressions.toLocaleString()} impr. · {row.clicks.toLocaleString()} clicks

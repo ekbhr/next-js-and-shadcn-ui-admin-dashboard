@@ -831,7 +831,7 @@ async function getDashboardSummaryImpl(
     subId: d.domain || "",
     campaignId: d.campaignId,
     label:
-      maskAdvertivDomain("advertiv", d.domain, undefined) ||
+      maskAdvertivDomain("advertiv", d.domain, undefined, { campaignId: d.campaignId }) ||
       d.domain ||
       "—",
     grossRevenue: Math.round((d._sum.grossRevenue || 0) * 100) / 100,
@@ -866,13 +866,11 @@ async function getDashboardSummaryImpl(
   const topDomainsAgg = topCombined.slice(0, 5);
 
   const topDomains = topDomainsAgg.map((d) => ({
-    domain: maskAdvertivDomain(d.network, d.domain, undefined) || "All Domains",
-    subtitle:
-      d.network === "advertiv"
-        ? d.campaignId != null && String(d.campaignId).trim() !== ""
-          ? `Campaign: ${d.campaignId}`
-          : "Campaign: —"
-        : undefined,
+    domain:
+      maskAdvertivDomain(d.network, d.domain, undefined, {
+        campaignId: d.network === "advertiv" ? d.campaignId : undefined,
+      }) || "All Domains",
+    subtitle: undefined,
     grossRevenue: d.gross,
     netRevenue: d.net,
   }));
