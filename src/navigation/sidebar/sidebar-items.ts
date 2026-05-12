@@ -92,12 +92,6 @@ export const sidebarItems: NavGroup[] = [
     adminOnly: true,
     items: [
       {
-        title: "Sedo",
-        url: "/dashboard/admin/reports/sedo",
-        icon: Network,
-        adminOnly: true,
-      },
-      {
         title: "Yandex",
         url: "/dashboard/admin/reports/yandex",
         icon: Network,

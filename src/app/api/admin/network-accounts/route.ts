@@ -1,7 +1,7 @@
 /**
  * Network Accounts API
  * 
- * Manage multiple ad network accounts (Sedo, Yandex, etc.)
+ * Manage multiple ad network accounts (Yandex, Yahoo, YHS).
  * 
  * GET    - List all accounts (without credentials)
  * POST   - Create new account
@@ -18,7 +18,7 @@ import {
   getNetworkAccounts,
   migrateEnvCredentialsToDatabase,
 } from "@/lib/network-accounts";
-import type { AdvertivCredentials, SedoCredentials, YandexCredentials, YhsCredentials } from "@/lib/encryption";
+import type { AdvertivCredentials, YandexCredentials, YhsCredentials } from "@/lib/encryption";
 
 // ============================================
 // GET - List all accounts
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const network = searchParams.get("network") as "sedo" | "yandex" | "advertiv" | "yhs" | null;
+    const network = searchParams.get("network") as "yandex" | "advertiv" | "yhs" | null;
 
     const accounts = await getNetworkAccounts(network || undefined);
 
@@ -80,23 +80,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate network type
-    if (!["sedo", "yandex", "advertiv", "yhs"].includes(network)) {
+    if (!["yandex", "advertiv", "yhs"].includes(network)) {
       return NextResponse.json(
-        { error: "Invalid network type. Must be 'sedo', 'yandex', 'advertiv', or 'yhs'" },
+        { error: "Invalid network type. Must be 'yandex', 'advertiv', or 'yhs'" },
         { status: 400 }
       );
     }
 
     // Validate credentials based on network
-    if (network === "sedo") {
-      const sedoCreds = credentials as SedoCredentials;
-      if (!sedoCreds.partnerId || !sedoCreds.signKey || !sedoCreds.username || !sedoCreds.password) {
-        return NextResponse.json(
-          { error: "Sedo requires: partnerId, signKey, username, password" },
-          { status: 400 }
-        );
-      }
-    } else if (network === "yandex") {
+    if (network === "yandex") {
       const yandexCreds = credentials as YandexCredentials;
       if (!yandexCreds.oauthToken) {
         return NextResponse.json(
@@ -123,7 +115,7 @@ export async function POST(request: NextRequest) {
     }
 
     const account = await createNetworkAccount(
-      network,
+      network as "yandex" | "advertiv" | "yhs",
       name,
       credentials,
       isDefault || false

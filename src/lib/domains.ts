@@ -1,7 +1,7 @@
 /**
  * Domain Management Library
  * 
- * Orchestrates domain operations across all ad networks (Sedo, Yandex, etc.)
+ * Orchestrates domain operations across ad networks (Yandex, Yahoo, YHS).
  * 
  * This library:
  * - Fetches domains from all configured networks
@@ -9,22 +9,20 @@
  * - Provides unified domain lookup and management
  */
 
-import { sedoClient } from "./sedo";
 import { yandexClient } from "./yandex";
 import { advertivClient } from "./advertiv";
 import { yhsClient } from "./yhs";
 import { prisma } from "./prisma";
 import { getActiveAccountsWithCredentials } from "./network-accounts";
-import { createSedoClient } from "./sedo";
 import { createYandexClient } from "./yandex";
 import { createAdvertivClient } from "./advertiv";
 import { createYhsClient } from "./yhs";
-import { isSedoCredentials, isYandexCredentials, isAdvertivCredentials, isYhsCredentials } from "./encryption";
+import { isYandexCredentials, isAdvertivCredentials, isYhsCredentials } from "./encryption";
 
 // Types
 export interface NetworkDomain {
   domain: string;
-  network: "sedo" | "yandex" | string;
+  network: string;
   revenue?: number;
   impressions?: number;
   clicks?: number;
@@ -51,7 +49,7 @@ export interface AllNetworksSyncResult {
  * Fetch domains from a specific network
  */
 export async function fetchDomainsFromNetwork(
-  network: "sedo" | "yandex" | "advertiv" | "yhs"
+  network: "yandex" | "advertiv" | "yhs"
 ): Promise<{ success: boolean; domains: NetworkDomain[]; error?: string }> {
   const allDomains: NetworkDomain[] = [];
   const errors: string[] = [];
@@ -60,23 +58,7 @@ export async function fetchDomainsFromNetwork(
   if (accounts.length > 0) {
     for (const account of accounts) {
       try {
-        if (network === "sedo" && isSedoCredentials(account.credentials)) {
-          const result = await createSedoClient(account.credentials, {
-            accountId: account.id,
-            accountName: account.name,
-          }).getDomains();
-          if (result.success) {
-            allDomains.push(...result.domains.map((d) => ({
-              domain: d.domain,
-              network: "sedo",
-              revenue: d.revenue,
-              impressions: d.impressions,
-              clicks: d.clicks,
-            })));
-          } else {
-            errors.push(`${account.name}: ${result.error}`);
-          }
-        } else if (network === "yandex" && isYandexCredentials(account.credentials)) {
+        if (network === "yandex" && isYandexCredentials(account.credentials)) {
           const result = await createYandexClient(account.credentials, {
             accountId: account.id,
             accountName: account.name,
@@ -142,23 +124,6 @@ export async function fetchDomainsFromNetwork(
   }
 
   switch (network) {
-    case "sedo": {
-      if (!sedoClient.isConfigured()) {
-        return { success: false, domains: [], error: "Sedo not configured" };
-      }
-      const result = await sedoClient.getDomains();
-      if (!result.success) return { success: false, domains: [], error: result.error };
-      return {
-        success: true,
-        domains: result.domains.map((d) => ({
-          domain: d.domain,
-          network: "sedo",
-          revenue: d.revenue,
-          impressions: d.impressions,
-          clicks: d.clicks,
-        })),
-      };
-    }
     case "yandex": {
       if (!yandexClient.isConfigured()) {
         return { success: false, domains: [], error: "Yandex not configured" };
@@ -229,30 +194,15 @@ export async function fetchDomainsFromAllNetworks(): Promise<{
   const errors: string[] = [];
 
   // Include networks configured via DB accounts OR env vars.
-  const [sedoAccounts, yandexAccounts, advertivAccounts, yhsAccounts] = await Promise.all([
-    getActiveAccountsWithCredentials("sedo"),
+  const [yandexAccounts, advertivAccounts, yhsAccounts] = await Promise.all([
     getActiveAccountsWithCredentials("yandex"),
     getActiveAccountsWithCredentials("advertiv"),
     getActiveAccountsWithCredentials("yhs"),
   ]);
 
-  const shouldFetchSedo = sedoAccounts.length > 0 || sedoClient.isConfigured();
   const shouldFetchYandex = yandexAccounts.length > 0 || yandexClient.isConfigured();
   const shouldFetchAdvertiv = advertivAccounts.length > 0 || advertivClient.isConfigured();
   const shouldFetchYhs = yhsAccounts.length > 0 || yhsClient.isConfigured();
-
-  // Fetch from Sedo
-  if (shouldFetchSedo) {
-    console.log("[Domains] Fetching from Sedo...");
-    const sedoResult = await fetchDomainsFromNetwork("sedo");
-    if (sedoResult.success) {
-      allDomains.push(...sedoResult.domains);
-      byNetwork.sedo = sedoResult.domains;
-      console.log(`[Domains] Sedo: ${sedoResult.domains.length} domains`);
-    } else {
-      errors.push(`Sedo: ${sedoResult.error}`);
-    }
-  }
 
   // Fetch from Yandex
   if (shouldFetchYandex) {
@@ -675,10 +625,6 @@ export function getConfiguredNetworks(): string[] {
   const networks: string[] = [];
 
   // Note: this check is env-var based. DB account status is handled separately where needed.
-  if (sedoClient.isConfigured()) {
-    networks.push("sedo");
-  }
-
   if (yandexClient.isConfigured()) {
     networks.push("yandex");
   }
@@ -702,10 +648,6 @@ export function getNetworkStatus(): Record<
   { configured: boolean; name: string }
 > {
   return {
-    sedo: {
-      configured: sedoClient.isConfigured(),
-      name: "Sedo",
-    },
     yandex: {
       configured: yandexClient.isConfigured(),
       name: "Yandex Advertising Network",

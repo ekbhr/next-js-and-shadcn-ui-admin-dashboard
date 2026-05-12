@@ -50,6 +50,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { exportToCSV } from "@/lib/export-utils";
+import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface Report {
   id: string;
@@ -231,19 +232,14 @@ const reportColumns: ColumnDef<Report>[] = [
   {
     accessorKey: "network",
     header: "Network",
-    cell: ({ row }) => (
-      <Badge
-        className={
-          row.original.network === "sedo"
-            ? "bg-blue-500"
-            : row.original.network === "google"
-            ? "bg-green-500"
-            : "bg-gray-500"
-        }
-      >
-        {row.original.network.toUpperCase()}
-      </Badge>
-    ),
+    cell: ({ row }) => {
+      const nid = row.original.network;
+      return (
+        <Badge className={getNetworkColors(nid).badge}>
+          {getNetworkName(nid, true)}
+        </Badge>
+      );
+    },
     filterFn: (row, id, value) => {
       return row.original.network.toLowerCase().includes(value.toLowerCase());
     },

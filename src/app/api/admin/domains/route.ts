@@ -75,7 +75,7 @@ export async function GET() {
       if (!domainMap.has(key)) {
         domainMap.set(key, {
           domain: assignment.domain,
-          network: assignment.network || "sedo",
+          network: assignment.network || "yandex",
           assignments: [],
         });
       }
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { userId, domain, network = "sedo", revShare = 80 } = body;
+    const { userId, domain, network = "yandex", revShare = 80 } = body;
 
     if (!userId || !domain) {
       return NextResponse.json(
@@ -210,7 +210,7 @@ export async function DELETE(request: Request) {
     }
 
     const body = await request.json();
-    const { assignmentId, userId, domain, network = "sedo" } = body;
+    const { assignmentId, userId, domain, network = "yandex" } = body;
 
     // Delete by assignmentId if provided
     if (assignmentId) {

@@ -45,10 +45,12 @@ export function RevenueTable({ data }: RevenueTableProps) {
   // Get network badge color
   const getNetworkColor = (network: string) => {
     switch (network.toLowerCase()) {
-      case "sedo":
-        return "bg-blue-500";
       case "yandex":
         return "bg-red-500";
+      case "advertiv":
+        return "bg-purple-500";
+      case "yhs":
+        return "bg-sky-500";
       case "google":
         return "bg-green-500";
       default:

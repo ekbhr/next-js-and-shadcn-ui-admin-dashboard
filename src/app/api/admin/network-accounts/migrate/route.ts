@@ -25,14 +25,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { network } = body;
 
-    if (!network || !["sedo", "yandex", "advertiv", "yhs"].includes(network)) {
+    if (!network || !["yandex", "advertiv", "yhs"].includes(network)) {
       return NextResponse.json(
-        { error: "Invalid network. Must be 'sedo', 'yandex', 'advertiv', or 'yhs'" },
+        { error: "Invalid network. Must be 'yandex', 'advertiv', or 'yhs'" },
         { status: 400 }
       );
     }
 
-    const result = await migrateEnvCredentialsToDatabase(network);
+    const result = await migrateEnvCredentialsToDatabase(
+      network as "yandex" | "advertiv" | "yhs",
+    );
 
     return NextResponse.json(result);
   } catch (error) {

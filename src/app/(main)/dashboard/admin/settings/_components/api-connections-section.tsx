@@ -21,7 +21,6 @@ interface ApiStatus {
 
 interface ApiConnectionsSectionProps {
   apiStatus: {
-    sedo: ApiStatus;
     yandex: ApiStatus;
     advertiv: ApiStatus;
     yhs: ApiStatus;
@@ -49,20 +48,18 @@ export function ApiConnectionsSection({ apiStatus }: ApiConnectionsSectionProps)
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ network: string; success: boolean; message: string } | null>(null);
 
-  const testConnection = async (network: "sedo" | "yandex" | "advertiv" | "yhs") => {
+  const testConnection = async (network: "yandex" | "advertiv" | "yhs") => {
     setTesting(network);
     setTestResult(null);
 
     try {
       // Use dedicated test endpoints
       const endpoint =
-        network === "sedo"
-          ? "/api/reports/sedo/test"
-          : network === "yandex"
-            ? "/api/reports/yandex/test"
-            : network === "advertiv"
-              ? "/api/reports/advertiv/test"
-              : "/api/reports/yhs/test";
+        network === "yandex"
+          ? "/api/reports/yandex/test"
+          : network === "advertiv"
+            ? "/api/reports/advertiv/test"
+            : "/api/reports/yhs/test";
       
       const response = await fetch(endpoint, {
         method: "POST",
@@ -89,7 +86,6 @@ export function ApiConnectionsSection({ apiStatus }: ApiConnectionsSectionProps)
   };
 
   const networks = [
-    { id: "sedo" as const, status: apiStatus.sedo },
     { id: "yandex" as const, status: apiStatus.yandex },
     { id: "advertiv" as const, status: apiStatus.advertiv },
     { id: "yhs" as const, status: apiStatus.yhs },

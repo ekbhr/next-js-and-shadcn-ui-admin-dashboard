@@ -36,7 +36,9 @@ export function CleanupButton() {
         throw new Error(data.error || "Cleanup failed");
       }
 
-      setResult(`Deleted: ${data.deleted.bidderSedo} Sedo records, ${data.deleted.overviewReport} Overview records`);
+      setResult(
+        `Deleted: Yandex ${data.deleted.bidderYandex}, Yahoo ${data.deleted.bidderAdvertiv}, YHS ${data.deleted.bidderYhs}, Overview ${data.deleted.overviewReport}`,
+      );
       
       // Refresh the page after a short delay
       setTimeout(() => {
@@ -61,7 +63,7 @@ export function CleanupButton() {
         <AlertDialogHeader>
           <AlertDialogTitle>Clear All Revenue Data?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will delete ALL revenue data (Bidder_Sedo and Overview_Report) for ALL users.
+            This will delete ALL revenue data (Yandex, Yahoo, YHS, and Overview_Report) for ALL users.
             You will need to resync data after this action.
             This action cannot be undone.
           </AlertDialogDescription>

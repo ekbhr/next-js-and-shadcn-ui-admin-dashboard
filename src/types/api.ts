@@ -101,7 +101,6 @@ export interface DomainSyncResponse extends ApiResponse {
     errors: number;
   }>;
   networkStatus?: {
-    sedo: boolean;
     yandex: boolean;
     advertiv?: boolean;
     yhs?: boolean;
@@ -139,7 +138,7 @@ export interface PaymentDetailsInfo {
 // Network Account Types
 // ============================================
 
-export type NetworkType = "sedo" | "yandex" | "advertiv" | "yhs";
+export type NetworkType = "yandex" | "advertiv" | "yhs";
 
 export interface NetworkAccountInfo {
   id: string;
@@ -172,13 +171,6 @@ export interface RevenueRecord {
   accountId?: string | null;
 }
 
-export interface SedoRevenueRecord extends RevenueRecord {
-  c1?: string | null;
-  c2?: string | null;
-  c3?: string | null;
-  tag?: string | null;
-}
-
 export interface YandexRevenueRecord extends RevenueRecord {
   tagName?: string | null;
   tagId?: string | null;
@@ -195,7 +187,6 @@ export interface SystemSettingsInfo {
   emailOnSyncFailure: boolean;
   emailWeeklySummary: boolean;
   adminEmail?: string | null;
-  lastSedoSync?: Date | string | null;
   lastYandexSync?: Date | string | null;
   lastAdvertivSync?: Date | string | null;
   lastYhsSync?: Date | string | null;

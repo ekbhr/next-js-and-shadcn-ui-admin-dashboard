@@ -14,7 +14,6 @@ export interface SystemSettings {
   emailOnSyncFailure: boolean;
   emailWeeklySummary: boolean;
   adminEmail: string | null;
-  lastSedoSync: Date | null;
   lastYandexSync: Date | null;
   lastAdvertivSync: Date | null;
   lastYhsSync: Date | null;
@@ -46,7 +45,6 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     emailOnSyncFailure: settings.emailOnSyncFailure,
     emailWeeklySummary: settings.emailWeeklySummary,
     adminEmail: settings.adminEmail,
-    lastSedoSync: settings.lastSedoSync,
     lastYandexSync: settings.lastYandexSync,
     lastAdvertivSync: settings.lastAdvertivSync,
     lastYhsSync: settings.lastYhsSync,
@@ -59,7 +57,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
  */
 export async function updateSystemSettings(
   updates: Partial<
-    Omit<SystemSettings, "lastSedoSync" | "lastYandexSync" | "lastAdvertivSync" | "lastYhsSync" | "lastDomainSync">
+    Omit<SystemSettings, "lastYandexSync" | "lastAdvertivSync" | "lastYhsSync" | "lastDomainSync">
   >
 ): Promise<SystemSettings> {
   const settings = await prisma.systemSettings.upsert({
@@ -79,7 +77,6 @@ export async function updateSystemSettings(
     emailOnSyncFailure: settings.emailOnSyncFailure,
     emailWeeklySummary: settings.emailWeeklySummary,
     adminEmail: settings.adminEmail,
-    lastSedoSync: settings.lastSedoSync,
     lastYandexSync: settings.lastYandexSync,
     lastAdvertivSync: settings.lastAdvertivSync,
     lastYhsSync: settings.lastYhsSync,
@@ -91,10 +88,9 @@ export async function updateSystemSettings(
  * Update last sync timestamp for a network
  */
 export async function updateLastSync(
-  network: "sedo" | "yandex" | "advertiv" | "yhs" | "domains"
+  network: "yandex" | "advertiv" | "yhs" | "domains"
 ): Promise<void> {
   const fieldMap = {
-    sedo: "lastSedoSync",
     yandex: "lastYandexSync",
     advertiv: "lastAdvertivSync",
     yhs: "lastYhsSync",

@@ -57,7 +57,6 @@ model User {
   resetTokens   PasswordResetToken[]
   
   // Revenue & Reporting relations
-  sedoRevenue       Bidder_Sedo[]
   yandexRevenue     Bidder_Yandex[]
   advertivRevenue   Bidder_Advertiv[]
   yhsRevenue        Bidder_YHS[]
@@ -135,17 +134,16 @@ model VerificationToken {
 // NETWORK ACCOUNTS (Multi-Account Support)
 // ============================================
 
-// Network account credentials (e.g., multiple Sedo accounts)
+// Network account credentials (multi-account per network)
 model NetworkAccount {
   id            String   @id @default(cuid())
   
   // Account identification
-  network       String   // "sedo", "yandex"
-  name          String   // Display name: "Sedo Account 1", "Client XYZ"
+  network       String   // "yandex", "advertiv", "yhs"
+  name          String   // Display name, e.g. "Primary Yandex Account"
   
   // Encrypted credentials (JSON string, encrypted at rest)
-  // Sedo: { partnerId, signKey, username, password }
-  // Yandex: { oauthToken }
+  // Yandex: { oauthToken }; Advertiv/YHS: { apiKey }
   credentials   String   @db.Text
   
   // Status
@@ -158,7 +156,6 @@ model NetworkAccount {
   
   // Relations
   domains       Domain_Assignment[]
-  sedoRevenue   Bidder_Sedo[]
   yandexRevenue Bidder_Yandex[]
   advertivRevenue Bidder_Advertiv[]
   yhsRevenue    Bidder_YHS[]
@@ -172,55 +169,6 @@ model NetworkAccount {
 // REVENUE DATA TABLES
 // ============================================
 
-// Sedo-specific revenue data with SubID support
-model Bidder_Sedo {
-  id            String   @id @default(cuid())
-  
-  // Core fields
-  date          DateTime // Reporting date
-  domain        String?  // Domain name
-  
-  // Sedo-specific SubIDs (for tracking)
-  c1            String?  // Sub ID 1
-  c2            String?  // Sub ID 2
-  c3            String?  // Sub ID 3
-  
-  // Revenue
-  grossRevenue  Float    // Total earnings from Sedo
-  netRevenue    Float    // After revshare deduction
-  revShare      Float    @default(80) // Partner's percentage
-  currency      String   @default("EUR")
-  
-  // Metrics
-  impressions   Int      // Unique visitors
-  clicks        Int
-  ctr           Float?   // Click-through rate
-  rpm           Float?   // Revenue per mille
-  
-  // Metadata
-  status        String?  // "Final" or "Estimated"
-  tag           String?  // Custom tag/label
-  
-  // Timestamps
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  // Multi-user support
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Multi-account support
-  accountId     String?
-  account       NetworkAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  
-  // Unique constraint for upsert (prevents duplicates)
-  @@unique([date, domain, c1, c2, c3, userId])
-  @@index([date])
-  @@index([userId])
-  @@index([domain])
-  @@index([accountId])
-}
-
 // Domain assignment & RevShare configuration
 // One domain can only be assigned to ONE user
 model Domain_Assignment {
@@ -229,7 +177,7 @@ model Domain_Assignment {
   // Assignment
   userId        String   // The user who owns this domain
   domain        String   // Domain name (required, no null)
-  network       String   @default("sedo") // Network source
+  network       String   @default("yandex") // Network source
   
   // Multi-account support
   accountId     String?  // Links to NetworkAccount
@@ -263,7 +211,7 @@ model Overview_Report {
   
   // Core fields
   date          DateTime
-  network       String   // "sedo", "yandex", "google"
+  network       String   // "yandex", "advertiv", "yhs", etc.
   domain        String?
   
   // Revenue (common fields)
@@ -508,7 +456,6 @@ model SystemSettings {
   adminEmail            String?  // Override admin email for notifications
   
   // Sync Configuration
-  lastSedoSync          DateTime?
   lastYandexSync        DateTime?
   lastAdvertivSync      DateTime?
   lastYhsSync          DateTime?

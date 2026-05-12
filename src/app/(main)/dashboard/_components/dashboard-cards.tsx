@@ -3,7 +3,7 @@
  * 
  * Shows key metrics for the selected period.
  * Gross revenue is only shown to admin users.
- * Network breakdown shows revenue by network (Sedo, Yandex, etc.)
+ * Network breakdown shows revenue by network (Yandex, Yahoo, YHS, etc.)
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

@@ -13,14 +13,12 @@ import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface SyncStatusProps {
   lastSync: {
-    sedo: Date | null;
     yandex: Date | null;
     advertiv: Date | null;
     yhs: Date | null;
     overall: Date | null;
   };
   recordCounts: {
-    sedo: number;
     yandex: number;
     advertiv: number;
     yhs: number;
@@ -119,17 +117,6 @@ export function SyncStatus({ lastSync, recordCounts, isAdmin = false }: SyncStat
 
           {/* Network breakdown */}
           <div className="flex flex-wrap items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className={getNetworkColors("sedo").outlineBadge}>
-                {getNetworkName("sedo", true)}
-              </Badge>
-              <span className="text-muted-foreground">
-                {recordCounts.sedo.toLocaleString()} records
-              </span>
-              <Clock className="h-3 w-3 text-muted-foreground" />
-              <span className="text-muted-foreground">{formatTimeAgo(lastSync.sedo)}</span>
-            </div>
-
             <div className="flex items-center gap-1.5">
               <Badge variant="outline" className={getNetworkColors("yandex").outlineBadge}>
                 {getNetworkName("yandex", true)}

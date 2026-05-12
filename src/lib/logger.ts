@@ -11,9 +11,9 @@
  * ```ts
  * import { logger } from "@/lib/logger";
  * 
- * logger.info("Sedo Sync", "Starting sync...");
- * logger.error("Sedo Sync", "Failed to sync", error);
- * logger.debug("Sedo Sync", "Debug data", { data });
+ * logger.info("Revenue Sync", "Starting sync...");
+ * logger.error("Revenue Sync", "Failed to sync", error);
+ * logger.debug("Revenue Sync", "Debug data", { data });
  * ```
  */
 

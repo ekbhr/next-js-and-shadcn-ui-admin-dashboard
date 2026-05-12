@@ -10,7 +10,6 @@
 import { prisma } from "@/lib/prisma";
 import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
 import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
-import type { SedoRevenueData } from "@/lib/sedo";
 import type { YandexRevenueData } from "@/lib/yandex";
 import type { AdvertivRevenueData } from "@/lib/advertiv";
 import type { YhsRevenueData } from "@/lib/yhs";
@@ -70,239 +69,12 @@ export function calculateNetRevenue(grossRevenue: number, revShare: number): num
 }
 
 /**
- * Save Sedo revenue data to database (upsert)
- * Updates if record exists, inserts if new
- * 
- * IMPORTANT: Data is saved to the USER WHO OWNS THE DOMAIN, not the logged-in user.
- * 
- * @param data - Array of Sedo revenue data
- * @param fallbackUserId - User ID to use if domain has no assignment (usually admin)
- * @param options - Optional settings
- * @param options.filterByAssignedDomains - If true, only saves data for domains assigned to specific users
- * @param options.saveToDomainOwner - If true, saves data to the user who owns the domain (default: true)
- * @param options.accountId - Network account ID for multi-account support
- */
-export async function saveSedoRevenue(
-  data: SedoRevenueData[],
-  fallbackUserId: string,
-  options: { filterByAssignedDomains?: boolean; saveToDomainOwner?: boolean; accountId?: string } = {}
-): Promise<{ saved: number; updated: number; skipped: number; errors: string[] }> {
-  let saved = 0;
-  let updated = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-
-  // Default: save to domain owner
-  const saveToDomainOwner = options.saveToDomainOwner !== false;
-
-  // OPTIMIZED: Get all domain assignments in ONE query (userId + revShare)
-  // This eliminates N+1 queries - we now fetch everything upfront
-  const domainAssignments = await getAllDomainAssignmentsMap("sedo");
-
-  for (const item of data) {
-    try {
-      const domainValue = item.domain || null;
-      const normalizedDomain = domainValue?.toLowerCase().trim();
-
-      // Determine which user should own this data and get revShare
-      let targetUserId = fallbackUserId;
-      let revShare = DEFAULT_REV_SHARE;
-      
-      if (saveToDomainOwner && normalizedDomain) {
-        const assignment = domainAssignments.get(normalizedDomain);
-        if (assignment) {
-          targetUserId = assignment.userId;
-          revShare = assignment.revShare;
-        } else if (options.filterByAssignedDomains) {
-          // Domain not assigned to anyone - skip if filtering is enabled
-          skipped++;
-          continue;
-        }
-        // If domain not assigned but filtering disabled, use fallback user (admin)
-      } else if (options.filterByAssignedDomains && !normalizedDomain) {
-        // Skip aggregate data (no domain) when filtering
-        skipped++;
-        continue;
-      }
-
-      // Calculate net revenue (no DB call needed now!)
-      const netRevenue = calculateNetRevenue(item.revenue, revShare);
-
-      // Parse date - ensure it's a valid date
-      const date = new Date(item.date);
-      date.setUTCHours(0, 0, 0, 0); // Normalize to midnight UTC
-
-      // Data to save
-      const recordData = {
-        grossRevenue: item.revenue,
-        netRevenue,
-        revShare,
-        impressions: item.impressions || item.uniques || 0,
-        clicks: item.clicks || 0,
-        ctr: item.ctr || null,
-        rpm: item.rpm || null,
-        status: "Estimated",
-        accountId: options.accountId || null,
-      };
-
-      // Find existing record manually (check both for this user and if domain already exists for another user)
-      const existing = await prisma.bidder_Sedo.findFirst({
-        where: {
-          date,
-          domain: domainValue,
-          c1: null,
-          c2: null,
-          c3: null,
-          userId: targetUserId,
-        },
-      });
-
-      if (existing) {
-        // Update existing record
-        await prisma.bidder_Sedo.update({
-          where: { id: existing.id },
-          data: recordData,
-        });
-        updated++;
-      } else {
-        // Check if this domain+date exists for a DIFFERENT user (shouldn't happen, but handle it)
-        const existingOtherUser = await prisma.bidder_Sedo.findFirst({
-          where: {
-            date,
-            domain: domainValue,
-            c1: null,
-            c2: null,
-            c3: null,
-          },
-        });
-
-        if (existingOtherUser && existingOtherUser.userId !== targetUserId) {
-          // Update existing record to correct user
-          await prisma.bidder_Sedo.update({
-            where: { id: existingOtherUser.id },
-            data: {
-              userId: targetUserId,
-              ...recordData,
-            },
-          });
-          updated++;
-        } else if (!existingOtherUser) {
-          // Create new record
-          await prisma.bidder_Sedo.create({
-            data: {
-              date,
-              domain: domainValue,
-              c1: null,
-              c2: null,
-              c3: null,
-              currency: "EUR",
-              userId: targetUserId,
-              ...recordData,
-            },
-          });
-          saved++;
-        } else {
-          updated++; // Same user, just update
-        }
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      errors.push(`Failed to save ${item.date} ${item.domain}: ${errorMsg}`);
-      console.error(`[Revenue DB] Error saving ${item.date} ${item.domain}:`, error);
-    }
-  }
-
-  console.log(`[Revenue DB] Sedo data saved: ${saved} new, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
-  
-  // Invalidate dashboard cache after sync
-  cache.invalidatePrefix("dashboard:");
-  cache.invalidatePrefix("sync-status:");
-  
-  return { saved, updated, skipped, errors };
-}
-
-/**
- * Get Sedo revenue data from database
- */
-export async function getSedoRevenue(
-  userId: string,
-  options: {
-    startDate?: Date;
-    endDate?: Date;
-    domain?: string;
-    limit?: number;
-  } = {}
-) {
-  const { startDate, endDate, domain, limit } = options;
-
-  const where: Record<string, unknown> = { userId };
-
-  if (startDate || endDate) {
-    where.date = {};
-    if (startDate) (where.date as Record<string, Date>).gte = startDate;
-    if (endDate) (where.date as Record<string, Date>).lte = endDate;
-  }
-
-  if (domain) {
-    where.domain = domain;
-  }
-
-  const data = await prisma.bidder_Sedo.findMany({
-    where,
-    orderBy: { date: "asc" },
-    take: limit,
-  });
-
-  return data;
-}
-
-/**
- * Get aggregated revenue summary
- */
-export async function getSedoRevenueSummary(
-  userId: string,
-  options: {
-    startDate?: Date;
-    endDate?: Date;
-  } = {}
-) {
-  const { startDate, endDate } = options;
-
-  const where: Record<string, unknown> = { userId };
-
-  if (startDate || endDate) {
-    where.date = {};
-    if (startDate) (where.date as Record<string, Date>).gte = startDate;
-    if (endDate) (where.date as Record<string, Date>).lte = endDate;
-  }
-
-  const result = await prisma.bidder_Sedo.aggregate({
-    where,
-    _sum: {
-      grossRevenue: true,
-      netRevenue: true,
-      impressions: true,
-      clicks: true,
-    },
-    _count: true,
-  });
-
-  return {
-    totalGrossRevenue: result._sum.grossRevenue || 0,
-    totalNetRevenue: result._sum.netRevenue || 0,
-    totalImpressions: result._sum.impressions || 0,
-    totalClicks: result._sum.clicks || 0,
-    recordCount: result._count,
-  };
-}
-
-/**
  * Create or update domain assignment (revShare settings)
  */
 export async function setDomainAssignment(
   userId: string,
   domain: string,
-  network: string = "sedo",
+  network: string = "yandex",
   revShare: number,
   notes?: string
 ) {
@@ -355,7 +127,7 @@ export async function getDomainAssignments(userId: string) {
  */
 export async function getUserAssignedDomains(
   userId: string,
-  network: string = "sedo"
+  network: string = "yandex"
 ): Promise<string[]> {
   const assignments = await prisma.domain_Assignment.findMany({
     where: {
@@ -377,7 +149,7 @@ export async function getUserAssignedDomains(
  */
 export async function getDomainOwner(
   domain: string,
-  network: string = "sedo"
+  network: string = "yandex"
 ): Promise<string | null> {
   const assignment = await prisma.domain_Assignment.findFirst({
     where: {
@@ -396,7 +168,7 @@ export async function getDomainOwner(
  * Returns a Map of domain -> userId
  */
 export async function getAllDomainOwners(
-  network: string = "sedo"
+  network: string = "yandex"
 ): Promise<Map<string, string>> {
   const assignments = await prisma.domain_Assignment.findMany({
     where: {
@@ -416,13 +188,13 @@ export async function getAllDomainOwners(
 }
 
 /**
- * Sync domains from Sedo to Domain_Assignment table
+ * Sync domains from a network into Domain_Assignment
  * Creates assignments with default revShare if they don't exist
  */
 export async function syncDomainsToAssignment(
   userId: string,
   domains: Array<{ domain: string; revenue?: number; clicks?: number; impressions?: number }>,
-  network: string = "sedo",
+  network: string = "yandex",
   defaultRevShare: number = 80
 ): Promise<{ created: number; existing: number; errors: string[] }> {
   let created = 0;
@@ -465,118 +237,6 @@ export async function syncDomainsToAssignment(
 
   console.log(`[Domain Sync] ${network}: ${created} created, ${existing} existing, ${errors.length} errors`);
   return { created, existing, errors };
-}
-
-/**
- * Sync Bidder_Sedo data to Overview_Report
- * If userId is provided, syncs only that user's data
- * If userId is null, syncs ALL users' data (admin sync)
- * 
- * Data in Bidder_Sedo already has correct userId from saveSedoRevenue
- */
-export async function syncToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
-  let synced = 0;
-  const errors: string[] = [];
-
-  try {
-    // Get Sedo data - either for one user or all users
-    const sedoData = await prisma.bidder_Sedo.findMany({
-      where: userId ? { userId } : undefined,
-    });
-
-    // Group by userId + date + domain for Overview
-    const grouped = new Map<string, {
-      userId: string;
-      date: Date;
-      domain: string | null;
-      grossRevenue: number;
-      netRevenue: number;
-      impressions: number;
-      clicks: number;
-    }>();
-
-    for (const record of sedoData) {
-      const key = `${record.userId}_${record.date.toISOString().split('T')[0]}_${record.domain || 'all'}`;
-      
-      if (grouped.has(key)) {
-        const existing = grouped.get(key)!;
-        existing.grossRevenue += record.grossRevenue;
-        existing.netRevenue += record.netRevenue;
-        existing.impressions += record.impressions;
-        existing.clicks += record.clicks;
-      } else {
-        grouped.set(key, {
-          userId: record.userId,
-          date: record.date,
-          domain: record.domain,
-          grossRevenue: record.grossRevenue,
-          netRevenue: record.netRevenue,
-          impressions: record.impressions,
-          clicks: record.clicks,
-        });
-      }
-    }
-
-    // Save to Overview_Report
-    for (const [, data] of grouped) {
-      try {
-        const ctr = data.impressions > 0 
-          ? Math.round((data.clicks / data.impressions) * 10000) / 100 
-          : null;
-        const rpm = data.impressions > 0 
-          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100 
-          : null;
-
-        const recordData = {
-          grossRevenue: data.grossRevenue,
-          netRevenue: data.netRevenue,
-          impressions: data.impressions,
-          clicks: data.clicks,
-          ctr,
-          rpm,
-        };
-
-        // Find existing record
-        const existing = await prisma.overview_Report.findFirst({
-          where: {
-            date: data.date,
-            network: "sedo",
-            domain: data.domain,
-            userId: data.userId,
-          },
-        });
-
-        if (existing) {
-          await prisma.overview_Report.update({
-            where: { id: existing.id },
-            data: recordData,
-          });
-        } else {
-          await prisma.overview_Report.create({
-            data: {
-              date: data.date,
-              network: "sedo",
-              domain: data.domain,
-              currency: "EUR",
-              userId: data.userId,
-              ...recordData,
-            },
-          });
-        }
-        synced++;
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
-      }
-    }
-
-    console.log(`[Overview Sync] ${userId ? `User ${userId}` : 'All users'}: ${synced} records synced, ${errors.length} errors`);
-  } catch (error) {
-    console.error("[Overview Sync] Error:", error);
-    errors.push(error instanceof Error ? error.message : "Unknown error");
-  }
-
-  return { synced, errors };
 }
 
 /**
@@ -1714,7 +1374,6 @@ function isMissingDbObjectError(error: unknown): boolean {
  * Get the last sync time for each network
  */
 export async function getLastSyncTime(userId?: string): Promise<{
-  sedo: Date | null;
   yandex: Date | null;
   advertiv: Date | null;
   yhs: Date | null;
@@ -1723,12 +1382,7 @@ export async function getLastSyncTime(userId?: string): Promise<{
   const where = userId ? { userId } : {};
 
   // Get most recent updatedAt for each network
-  const [sedoRecord, yandexRecord, advertivRecord, yhsRecord] = await Promise.all([
-    prisma.bidder_Sedo.findFirst({
-      where,
-      orderBy: { updatedAt: "desc" },
-      select: { updatedAt: true },
-    }),
+  const [yandexRecord, advertivRecord, yhsRecord] = await Promise.all([
     prisma.bidder_Yandex.findFirst({
       where,
       orderBy: { updatedAt: "desc" },
@@ -1751,16 +1405,14 @@ export async function getLastSyncTime(userId?: string): Promise<{
       }),
   ]);
 
-  const sedoTime = sedoRecord?.updatedAt || null;
   const yandexTime = yandexRecord?.updatedAt || null;
   const advertivTime = advertivRecord?.updatedAt || null;
   const yhsTime = yhsRecord?.updatedAt || null;
-  const overall = [sedoTime, yandexTime, advertivTime, yhsTime]
+  const overall = [yandexTime, advertivTime, yhsTime]
     .filter((d): d is Date => Boolean(d))
     .sort((a, b) => b.getTime() - a.getTime())[0] || null;
 
   return {
-    sedo: sedoTime,
     yandex: yandexTime,
     advertiv: advertivTime,
     yhs: yhsTime,
@@ -1773,14 +1425,12 @@ export async function getLastSyncTime(userId?: string): Promise<{
  */
 export async function getSyncStatus(userId?: string): Promise<{
   lastSync: {
-    sedo: Date | null;
     yandex: Date | null;
     advertiv: Date | null;
     yhs: Date | null;
     overall: Date | null;
   };
   recordCounts: {
-    sedo: number;
     yandex: number;
     advertiv: number;
     yhs: number;
@@ -1792,9 +1442,8 @@ export async function getSyncStatus(userId?: string): Promise<{
     async () => {
       const where = userId ? { userId } : {};
 
-      const [lastSync, sedoCount, yandexCount, advertivCount, yhsCount, overviewCount] = await Promise.all([
+      const [lastSync, yandexCount, advertivCount, yhsCount, overviewCount] = await Promise.all([
         getLastSyncTime(userId),
-        prisma.bidder_Sedo.count({ where }),
         prisma.bidder_Yandex.count({ where }),
         prisma.bidder_Advertiv.count({ where }),
         prisma.bidder_YHS.count({ where }).catch((error) => {
@@ -1807,7 +1456,6 @@ export async function getSyncStatus(userId?: string): Promise<{
       return {
         lastSync,
         recordCounts: {
-          sedo: sedoCount,
           yandex: yandexCount,
           advertiv: advertivCount,
           yhs: yhsCount,

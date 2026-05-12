@@ -3,7 +3,7 @@
  * 
  * POST /api/domains/sync
  * 
- * Fetches domains from ALL configured networks (Sedo, Yandex) and syncs them to Domain_Assignment table.
+ * Fetches domains from all configured networks (Yandex, Yahoo, YHS) and syncs them to Domain_Assignment.
  * Creates new assignments with default revShare for new domains.
  * 
  * Uses the centralized domains.ts library for orchestration.

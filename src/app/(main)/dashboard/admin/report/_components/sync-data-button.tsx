@@ -26,30 +26,6 @@ export function SyncDataButton() {
     const results: SyncResult[] = [];
 
     try {
-      // Sync Sedo data
-      setResult("Syncing Sedo...");
-      try {
-        const sedoResponse = await fetch("/api/reports/sedo/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        const sedoData = await sedoResponse.json();
-        results.push({
-          network: "Sedo",
-          success: sedoData.success,
-          saved: sedoData.sync?.saved,
-          updated: sedoData.sync?.updated,
-          skipped: sedoData.sync?.skipped,
-          error: sedoData.error,
-        });
-      } catch (error) {
-        results.push({
-          network: "Sedo",
-          success: false,
-          error: error instanceof Error ? error.message : "Failed",
-        });
-      }
-
       // Sync Yandex data
       setResult("Syncing Yandex...");
       try {
@@ -93,6 +69,30 @@ export function SyncDataButton() {
       } catch (error) {
         results.push({
           network: "Yahoo",
+          success: false,
+          error: error instanceof Error ? error.message : "Failed",
+        });
+      }
+
+      // Sync YHS data
+      setResult("Syncing YHS...");
+      try {
+        const yhsResponse = await fetch("/api/reports/yhs/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        const yhsData = await yhsResponse.json();
+        results.push({
+          network: "YHS",
+          success: yhsData.success,
+          saved: yhsData.sync?.saved,
+          updated: yhsData.sync?.updated,
+          skipped: yhsData.sync?.skipped,
+          error: yhsData.error,
+        });
+      } catch (error) {
+        results.push({
+          network: "YHS",
           success: false,
           error: error instanceof Error ? error.message : "Failed",
         });

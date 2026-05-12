@@ -179,7 +179,7 @@ class AdvertivClient {
     }
 
     try {
-      // Default range: last 31 days (aligned with Sedo / Yandex sync)
+      // Default range: last 31 days (aligned with other network syncs)
       const to = params.to || new Date().toISOString().split("T")[0];
       const from =
         params.from ||

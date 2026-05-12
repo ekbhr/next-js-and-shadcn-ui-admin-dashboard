@@ -15,7 +15,6 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/roles";
 import { getSystemSettings } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
-import { sedoClient } from "@/lib/sedo";
 import { yandexClient } from "@/lib/yandex";
 import { advertivClient } from "@/lib/advertiv";
 import { yhsClient } from "@/lib/yhs";
@@ -46,14 +45,12 @@ export default async function AdminSettingsPage() {
   const settings = await getSystemSettings();
 
   // Get record counts for data management display
-  const [sedoCount, yandexCount, advertivCount, yhsCount, overviewCount, domainCount, sedoAccountCount, yandexAccountCount, advertivAccountCount, yhsAccountCount] = await Promise.all([
-    prisma.bidder_Sedo.count(),
+  const [yandexCount, advertivCount, yhsCount, overviewCount, domainCount, yandexAccountCount, advertivAccountCount, yhsAccountCount] = await Promise.all([
     prisma.bidder_Yandex.count(),
     prisma.bidder_Advertiv.count(),
     prisma.bidder_YHS.count(),
     prisma.overview_Report.count(),
     prisma.domain_Assignment.count(),
-    prisma.networkAccount.count({ where: { network: "sedo", isActive: true } }),
     prisma.networkAccount.count({ where: { network: "yandex", isActive: true } }),
     prisma.networkAccount.count({ where: { network: "advertiv", isActive: true } }),
     prisma.networkAccount.count({ where: { network: "yhs", isActive: true } }),
@@ -62,11 +59,6 @@ export default async function AdminSettingsPage() {
   // Get API connection status
   // Check both: database accounts OR environment variables
   const apiStatus = {
-    sedo: {
-      configured: sedoAccountCount > 0 || sedoClient.isConfigured(),
-      lastSync: settings.lastSedoSync,
-      accountCount: sedoAccountCount,
-    },
     yandex: {
       configured: yandexAccountCount > 0 || yandexClient.isConfigured(),
       lastSync: settings.lastYandexSync,
@@ -110,7 +102,6 @@ export default async function AdminSettingsPage() {
         {/* Data Management */}
         <DataManagementSection
           recordCounts={{
-            sedo: sedoCount,
             yandex: yandexCount,
             advertiv: advertivCount,
             yhs: yhsCount,

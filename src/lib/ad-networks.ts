@@ -77,38 +77,6 @@ export interface AdNetwork {
 // ============================================
 
 export const AD_NETWORKS: Record<string, AdNetwork> = {
-  sedo: {
-    id: "sedo",
-    name: "Sedo",
-    shortName: "Sedo",
-    description: "Domain parking and monetization platform",
-    currency: "EUR",
-    paymentTerms: "Net 30",
-    minPayout: 100,
-    colors: {
-      primary: "#0066CC",
-      text: "text-blue-700",
-      bg: "bg-blue-50",
-      border: "border-blue-200",
-      badge: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-      outlineBadge: "bg-blue-50 text-blue-700 border-blue-200",
-    },
-    features: {
-      revenue: true,
-      domains: true,
-      tags: false,
-      dailyBreakdown: true,
-      realtime: false,
-    },
-    api: {
-      baseUrl: "https://api.sedo.com/api/v1",
-      authType: "apiKey",
-      docsUrl: "https://sedo.com/api/",
-    },
-    status: "active",
-    envVar: "SEDO_API_KEY",
-  },
-
   yandex: {
     id: "yandex",
     name: "Yandex Advertising Network",

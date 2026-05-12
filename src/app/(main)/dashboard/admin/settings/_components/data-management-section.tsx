@@ -27,7 +27,6 @@ import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
 
 interface DataManagementSectionProps {
   recordCounts: {
-    sedo: number;
     yandex: number;
     advertiv: number;
     yhs: number;
@@ -67,23 +66,6 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to sync domains");
       setMessage({ type: "success", text: `Synced ${data.total || 0} domains` });
-      router.refresh();
-    } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed" });
-    } finally {
-      setSyncing(null);
-    }
-  };
-
-  // Sync Revenue (Sedo)
-  const syncSedo = async () => {
-    setSyncing("sedo");
-    setMessage(null);
-    try {
-      const response = await fetch("/api/reports/sedo/sync", { method: "POST" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to sync Sedo");
-      setMessage({ type: "success", text: `Synced ${data.savedCount || 0} Sedo records` });
       router.refresh();
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed" });
@@ -152,20 +134,17 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
       await fetch("/api/domains/sync", { method: "POST" });
       
       // Then sync revenue from all networks
-      const [sedoRes, yandexRes, advertivRes, yhsRes] = await Promise.all([
-        fetch("/api/reports/sedo/sync", { method: "POST" }),
+      const [yandexRes, advertivRes, yhsRes] = await Promise.all([
         fetch("/api/reports/yandex/sync", { method: "POST" }),
         fetch("/api/reports/advertiv/sync", { method: "POST" }),
         fetch("/api/reports/yhs/sync", { method: "POST" }),
       ]);
 
-      const sedoData = await sedoRes.json();
       const yandexData = await yandexRes.json();
       const advertivData = await advertivRes.json();
       const yhsData = await yhsRes.json();
 
       const totalRecords =
-        (sedoData.savedCount || 0) +
         (yandexData.savedCount || 0) +
         (advertivData.savedCount || 0) +
         (yhsData.savedCount || 0);
@@ -179,7 +158,7 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
   };
 
   // Clear Data
-  const clearData = async (type: "sedo" | "yandex" | "advertiv" | "yhs" | "all") => {
+  const clearData = async (type: "yandex" | "advertiv" | "yhs" | "all") => {
     setClearing(type);
     setMessage(null);
     try {
@@ -212,12 +191,7 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Record Counts */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
-          <div className="text-center p-3 rounded-lg bg-muted/50">
-            <Badge className={getNetworkColors("sedo").badge}>Sedo</Badge>
-            <p className="text-2xl font-bold mt-2">{recordCounts.sedo.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">records</p>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <div className="text-center p-3 rounded-lg bg-muted/50">
             <Badge className={getNetworkColors("yandex").badge}>Yandex</Badge>
             <p className="text-2xl font-bold mt-2">{recordCounts.yandex.toLocaleString()}</p>
@@ -263,20 +237,6 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
                 <Globe className="mr-2 h-4 w-4" />
               )}
               Sync Domains
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={syncSedo}
-              disabled={syncing !== null}
-              className="border-blue-200 hover:bg-blue-50"
-            >
-              {syncing === "sedo" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Sync {getNetworkName("sedo")}
             </Button>
 
             <Button
@@ -345,29 +305,6 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
             Danger Zone
           </h4>
           <div className="flex flex-wrap gap-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10" disabled={clearing !== null}>
-                  {clearing === "sedo" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                  Clear Sedo Data
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Clear Sedo Data?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will delete all {recordCounts.sedo.toLocaleString()} Sedo revenue records. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => clearData("sedo")} className="bg-destructive hover:bg-destructive/90">
-                    Delete Sedo Data
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10" disabled={clearing !== null}>
@@ -448,7 +385,7 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
                 <AlertDialogHeader>
                   <AlertDialogTitle>Clear ALL Revenue Data?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will delete ALL revenue records from all networks ({(recordCounts.sedo + recordCounts.yandex + recordCounts.advertiv + recordCounts.yhs + recordCounts.overview).toLocaleString()} total records). 
+                    This will delete ALL revenue records from all networks ({(recordCounts.yandex + recordCounts.advertiv + recordCounts.yhs + recordCounts.overview).toLocaleString()} total records). 
                     Domain assignments will be preserved. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>

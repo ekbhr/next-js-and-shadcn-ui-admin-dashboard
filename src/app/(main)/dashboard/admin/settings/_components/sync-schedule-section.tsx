@@ -22,31 +22,24 @@ interface ScheduleItem {
 
 const schedules: ScheduleItem[] = [
   {
-    network: "sedo",
+    network: "yandex",
     cron: "0 5 * * *",
     utcTime: "5:00 AM UTC",
     localTime: "9:00 AM Dubai (GST)",
     description: "Daily revenue sync",
   },
   {
-    network: "yandex",
+    network: "advertiv",
     cron: "0 6 * * *",
     utcTime: "6:00 AM UTC",
     localTime: "10:00 AM Dubai (GST)",
     description: "Daily revenue sync",
   },
   {
-    network: "advertiv",
+    network: "yhs",
     cron: "0 7 * * *",
     utcTime: "7:00 AM UTC",
     localTime: "11:00 AM Dubai (GST)",
-    description: "Daily revenue sync",
-  },
-  {
-    network: "yhs",
-    cron: "0 8 * * *",
-    utcTime: "8:00 AM UTC",
-    localTime: "12:00 PM Dubai (GST)",
     description: "Daily revenue sync",
   },
 ];

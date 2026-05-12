@@ -101,13 +101,6 @@ export function decryptObject<T>(encryptedBase64: string): T {
 // Credential Types
 // ============================================
 
-export interface SedoCredentials {
-  partnerId: string;
-  signKey: string;
-  username: string;
-  password: string;
-}
-
 export interface YandexCredentials {
   oauthToken: string;
 }
@@ -120,14 +113,7 @@ export interface YhsCredentials {
   apiKey: string;
 }
 
-export type NetworkCredentials = SedoCredentials | YandexCredentials | AdvertivCredentials | YhsCredentials;
-
-/**
- * Type guard to check if credentials are Sedo credentials.
- */
-export function isSedoCredentials(creds: NetworkCredentials): creds is SedoCredentials {
-  return "partnerId" in creds && "signKey" in creds;
-}
+export type NetworkCredentials = YandexCredentials | AdvertivCredentials | YhsCredentials;
 
 /**
  * Type guard to check if credentials are Yandex credentials.

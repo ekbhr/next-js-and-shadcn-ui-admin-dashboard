@@ -3,7 +3,7 @@
 /**
  * Network Accounts Section
  * 
- * Manage multiple ad network accounts (Sedo, Yandex, etc.)
+ * Manage multiple ad network accounts (Yandex, Yahoo, YHS).
  */
 
 import { useState, useEffect } from "react";
@@ -62,16 +62,10 @@ export function NetworkAccountsSection() {
   const [showPasswords, setShowPasswords] = useState(false);
 
   // Form state
-  const [formNetwork, setFormNetwork] = useState<"sedo" | "yandex" | "advertiv" | "yhs">("sedo");
+  const [formNetwork, setFormNetwork] = useState<"yandex" | "advertiv" | "yhs">("yandex");
   const [formName, setFormName] = useState("");
   const [formIsDefault, setFormIsDefault] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
-
-  // Sedo credentials
-  const [sedoPartnerId, setSedoPartnerId] = useState("");
-  const [sedoSignKey, setSedoSignKey] = useState("");
-  const [sedoUsername, setSedoUsername] = useState("");
-  const [sedoPassword, setSedoPassword] = useState("");
 
   // Yandex credentials
   const [yandexToken, setYandexToken] = useState("");
@@ -102,13 +96,9 @@ export function NetworkAccountsSection() {
   };
 
   const resetForm = () => {
-    setFormNetwork("sedo");
+    setFormNetwork("yandex");
     setFormName("");
     setFormIsDefault(false);
-    setSedoPartnerId("");
-    setSedoSignKey("");
-    setSedoUsername("");
-    setSedoPassword("");
     setYandexToken("");
     setAdvertivApiKey("");
     setYhsApiKey("");
@@ -122,12 +112,7 @@ export function NetworkAccountsSection() {
     }
 
     // Validate credentials
-    if (formNetwork === "sedo") {
-      if (!sedoPartnerId || !sedoSignKey || !sedoUsername || !sedoPassword) {
-        toast.error("All Sedo credentials are required");
-        return;
-      }
-    } else if (formNetwork === "yandex") {
+    if (formNetwork === "yandex") {
       if (!yandexToken) {
         toast.error("Yandex OAuth token is required");
         return;
@@ -147,9 +132,8 @@ export function NetworkAccountsSection() {
     setFormSubmitting(true);
 
     try {
-      const credentials = formNetwork === "sedo"
-        ? { partnerId: sedoPartnerId, signKey: sedoSignKey, username: sedoUsername, password: sedoPassword }
-        : formNetwork === "yandex"
+      const credentials =
+        formNetwork === "yandex"
           ? { oauthToken: yandexToken }
           : formNetwork === "advertiv"
             ? { apiKey: advertivApiKey }
@@ -281,7 +265,6 @@ export function NetworkAccountsSection() {
   };
 
   // Group accounts by network
-  const sedoAccounts = accounts.filter(a => a.network === "sedo");
   const yandexAccounts = accounts.filter(a => a.network === "yandex");
   const advertivAccounts = accounts.filter(a => a.network === "advertiv");
   const yhsAccounts = accounts.filter(a => a.network === "yhs");
@@ -325,14 +308,13 @@ export function NetworkAccountsSection() {
                   <Label>Network</Label>
                   <Select
                     value={formNetwork}
-                    onValueChange={(v) => setFormNetwork(v as "sedo" | "yandex" | "advertiv" | "yhs")}
+                    onValueChange={(v) => setFormNetwork(v as "yandex" | "advertiv" | "yhs")}
                     disabled={!!editingAccount}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sedo">Sedo</SelectItem>
                       <SelectItem value="yandex">Yandex (YAN)</SelectItem>
                       <SelectItem value="advertiv">Yahoo (Advertiv)</SelectItem>
                       <SelectItem value="yhs">YHS</SelectItem>
@@ -344,62 +326,11 @@ export function NetworkAccountsSection() {
                 <div className="space-y-2">
                   <Label>Account Name</Label>
                   <Input
-                    placeholder="e.g., Primary Sedo Account"
+                    placeholder="e.g., Primary Yandex Account"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                   />
                 </div>
-
-                {/* Sedo Credentials */}
-                {formNetwork === "sedo" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Partner ID</Label>
-                      <Input
-                        placeholder="Enter Partner ID"
-                        value={sedoPartnerId}
-                        onChange={(e) => setSedoPartnerId(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Sign Key</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPasswords ? "text" : "password"}
-                          placeholder="Enter Sign Key"
-                          value={sedoSignKey}
-                          onChange={(e) => setSedoSignKey(e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
-                          onClick={() => setShowPasswords(!showPasswords)}
-                        >
-                          {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Username</Label>
-                      <Input
-                        placeholder="Enter Username"
-                        value={sedoUsername}
-                        onChange={(e) => setSedoUsername(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Password</Label>
-                      <Input
-                        type={showPasswords ? "text" : "password"}
-                        placeholder="Enter Password"
-                        value={sedoPassword}
-                        onChange={(e) => setSedoPassword(e.target.value)}
-                      />
-                    </div>
-                  </>
-                )}
 
                 {/* Yandex Credentials */}
                 {formNetwork === "yandex" && (
@@ -514,30 +445,6 @@ export function NetworkAccountsSection() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Sedo Accounts */}
-            {sedoAccounts.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium flex items-center gap-2">
-                  <Badge className={getNetworkColors("sedo").badge}>
-                    {getNetworkName("sedo", true)}
-                  </Badge>
-                  <span className="text-muted-foreground">({sedoAccounts.length})</span>
-                </h4>
-                <div className="space-y-2">
-                  {sedoAccounts.map((account) => (
-                    <AccountRow
-                      key={account.id}
-                      account={account}
-                      onToggleActive={() => handleToggleActive(account)}
-                      onSetDefault={() => handleSetDefault(account)}
-                      onLinkDomains={() => handleLinkDomains(account)}
-                      onDelete={() => handleDelete(account.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Yandex Accounts */}
             {yandexAccounts.length > 0 && (
               <div className="space-y-3">

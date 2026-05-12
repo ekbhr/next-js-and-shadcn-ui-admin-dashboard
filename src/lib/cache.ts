@@ -122,9 +122,6 @@ export const CacheKeys = {
   overviewReport: (userId: string, network?: string, days?: number) => 
     `overview:${userId}:${network || "all"}:${days || 31}`,
   
-  sedoReport: (days: number) => 
-    `sedo-report:${days}`,
-  
   yandexReport: (days: number) => 
     `yandex-report:${days}`,
   
