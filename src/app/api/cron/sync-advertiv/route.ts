@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { advertivClient, createAdvertivClient } from "@/lib/advertiv";
-import { saveAdvertivRevenue, syncAdvertivToOverviewReport } from "@/lib/revenue-db";
+import { saveAdvertivRevenue } from "@/lib/revenue-db";
 import { notifySyncFailure } from "@/lib/notifications";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isAdvertivCredentials } from "@/lib/encryption";
@@ -157,7 +157,6 @@ export async function GET(request: Request) {
       }
     }
 
-    const overviewResult = await syncAdvertivToOverviewReport(null);
     await updateLastSync("advertiv");
 
     if (totalErrors > 0) {
@@ -179,7 +178,6 @@ export async function GET(request: Request) {
         recordsSaved: totalSaved,
         recordsUpdated: totalUpdated,
         recordsSkipped: totalSkipped,
-        overviewSynced: overviewResult.synced,
         errors: totalErrors,
       },
     });

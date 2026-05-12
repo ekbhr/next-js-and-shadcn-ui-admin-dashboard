@@ -9,13 +9,260 @@
 
 import { prisma } from "@/lib/prisma";
 import { cache, CacheKeys, CacheTTL } from "@/lib/cache";
-import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
+import { maskAdvertivDomain } from "@/lib/domain-alias";
 import type { YandexRevenueData } from "@/lib/yandex";
 import type { AdvertivRevenueData } from "@/lib/advertiv";
 import type { YhsRevenueData } from "@/lib/yhs";
 
 // Default revShare if no assignment found
 const DEFAULT_REV_SHARE = 80;
+
+/** One row shape for overview, API, and admin views (Yandex via Overview_Report; Yahoo/YHS via bidder tables). */
+export type UnifiedRevenueReportRow = {
+  id: string;
+  date: Date;
+  network: string;
+  domain: string | null;
+  /** Yahoo (Advertiv) only — used for YH_Feed_<sub>_<campaign> labels */
+  campaignId?: string | null;
+  grossRevenue: number;
+  netRevenue: number;
+  currency: string;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  rpm: number | null;
+  userId: string;
+};
+
+function mapAdvertivToUnified(r: {
+  id: string;
+  date: Date;
+  domain: string | null;
+  subId: string | null;
+  campaignId: string | null;
+  grossRevenue: number;
+  netRevenue: number;
+  currency: string;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  rpm: number | null;
+  userId: string;
+}): UnifiedRevenueReportRow {
+  return {
+    id: `advertiv:${r.id}`,
+    date: r.date,
+    network: "advertiv",
+    domain: r.domain ?? r.subId ?? null,
+    campaignId: r.campaignId ?? null,
+    grossRevenue: r.grossRevenue,
+    netRevenue: r.netRevenue,
+    currency: r.currency,
+    impressions: r.impressions,
+    clicks: r.clicks,
+    ctr: r.ctr ?? null,
+    rpm: r.rpm ?? null,
+    userId: r.userId,
+  };
+}
+
+function mapYhsToUnified(r: {
+  id: string;
+  date: Date;
+  domain: string | null;
+  grossRevenue: number;
+  netRevenue: number;
+  currency: string;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  rpm: number | null;
+  userId: string;
+}): UnifiedRevenueReportRow {
+  return {
+    id: `yhs:${r.id}`,
+    date: r.date,
+    network: "yhs",
+    domain: r.domain,
+    campaignId: null,
+    grossRevenue: r.grossRevenue,
+    netRevenue: r.netRevenue,
+    currency: r.currency,
+    impressions: r.impressions,
+    clicks: r.clicks,
+    ctr: r.ctr ?? null,
+    rpm: r.rpm ?? null,
+    userId: r.userId,
+  };
+}
+
+export type LoadUnifiedRevenueParams = {
+  userId: string;
+  scope: "user" | "all";
+  startDate?: Date;
+  endDate?: Date;
+  network?: string;
+  domain?: string;
+};
+
+/**
+ * Load revenue rows: Yandex from Overview_Report (network=yandex only); Yahoo/YHS from bidder tables (full detail).
+ */
+export async function loadUnifiedRevenueReportRows(
+  params: LoadUnifiedRevenueParams,
+): Promise<UnifiedRevenueReportRow[]> {
+  const { userId, scope, startDate, endDate, network, domain } = params;
+  const userFilter = scope === "all" ? {} : { userId };
+
+  const dateWhere: Record<string, unknown> = {};
+  if (startDate || endDate) {
+    dateWhere.date = {};
+    if (startDate) (dateWhere.date as Record<string, Date>).gte = startDate;
+    if (endDate) (dateWhere.date as Record<string, Date>).lte = endDate;
+  }
+
+  const rows: UnifiedRevenueReportRow[] = [];
+  const wantYandex = !network || network === "yandex";
+  const wantAdvertiv = !network || network === "advertiv";
+  const wantYhs = !network || network === "yhs";
+
+  if (wantYandex) {
+    const yandexData = await prisma.overview_Report.findMany({
+      where: {
+        ...userFilter,
+        ...dateWhere,
+        network: "yandex",
+        ...(domain ? { domain } : {}),
+      },
+      orderBy: { date: "desc" },
+    });
+    for (const r of yandexData) {
+      rows.push({
+        id: r.id,
+        date: r.date,
+        network: r.network,
+        domain: r.domain,
+        grossRevenue: r.grossRevenue,
+        netRevenue: r.netRevenue,
+        currency: r.currency,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        ctr: r.ctr ?? null,
+        rpm: r.rpm ?? null,
+        userId: r.userId,
+      });
+    }
+  }
+
+  if (wantAdvertiv) {
+    const d = domain?.trim();
+    const dNorm = d?.toLowerCase();
+    const advWhere: Record<string, unknown> = {
+      ...userFilter,
+      ...dateWhere,
+      ...(d
+        ? {
+            OR: [
+              { domain: d },
+              ...(dNorm && dNorm !== d ? [{ domain: dNorm }] : []),
+              { subId: d },
+              ...(dNorm && dNorm !== d ? [{ subId: dNorm }] : []),
+            ],
+          }
+        : {}),
+    };
+    const advData = await prisma.bidder_Advertiv.findMany({
+      where: advWhere,
+      orderBy: { date: "desc" },
+    });
+    for (const r of advData) {
+      rows.push(mapAdvertivToUnified(r));
+    }
+  }
+
+  if (wantYhs) {
+    const dNorm = domain?.toLowerCase().trim();
+    const yhsWhere: Record<string, unknown> = {
+      ...userFilter,
+      ...dateWhere,
+      ...(dNorm ? { domain: dNorm } : {}),
+    };
+    const yhsData = await prisma.bidder_YHS.findMany({
+      where: yhsWhere,
+      orderBy: { date: "desc" },
+    });
+    for (const r of yhsData) {
+      rows.push(mapYhsToUnified(r));
+    }
+  }
+
+  return rows.sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
+/** Row counts for pagination (same filters as loadUnifiedRevenueReportRows). */
+export async function countUnifiedRevenueReportRows(
+  params: LoadUnifiedRevenueParams,
+): Promise<number> {
+  const { userId, scope, startDate, endDate, network, domain } = params;
+  const userFilter = scope === "all" ? {} : { userId };
+
+  const dateWhere: Record<string, unknown> = {};
+  if (startDate || endDate) {
+    dateWhere.date = {};
+    if (startDate) (dateWhere.date as Record<string, Date>).gte = startDate;
+    if (endDate) (dateWhere.date as Record<string, Date>).lte = endDate;
+  }
+
+  const wantYandex = !network || network === "yandex";
+  const wantAdvertiv = !network || network === "advertiv";
+  const wantYhs = !network || network === "yhs";
+
+  let total = 0;
+
+  if (wantYandex) {
+    total += await prisma.overview_Report.count({
+      where: {
+        ...userFilter,
+        ...dateWhere,
+        network: "yandex",
+        ...(domain ? { domain } : {}),
+      },
+    });
+  }
+
+  if (wantAdvertiv) {
+    const d = domain?.trim();
+    const dNorm = d?.toLowerCase();
+    const advWhere: Record<string, unknown> = {
+      ...userFilter,
+      ...dateWhere,
+      ...(d
+        ? {
+            OR: [
+              { domain: d },
+              ...(dNorm && dNorm !== d ? [{ domain: dNorm }] : []),
+              { subId: d },
+              ...(dNorm && dNorm !== d ? [{ subId: dNorm }] : []),
+            ],
+          }
+        : {}),
+    };
+    total += await prisma.bidder_Advertiv.count({ where: advWhere });
+  }
+
+  if (wantYhs) {
+    const dNorm = domain?.toLowerCase().trim();
+    const yhsWhere: Record<string, unknown> = {
+      ...userFilter,
+      ...dateWhere,
+      ...(dNorm ? { domain: dNorm } : {}),
+    };
+    total += await prisma.bidder_YHS.count({ where: yhsWhere });
+  }
+
+  return total;
+}
 
 /**
  * Get revShare for a specific domain/network combination
@@ -256,25 +503,18 @@ export async function getOverviewReport(
 ) {
   const { startDate, endDate, network, domain, limit, scope = "user" } = options;
 
-  const where: Record<string, unknown> = {};
-  if (scope !== "all") {
-    where.userId = userId;
-  }
-
-  if (startDate || endDate) {
-    where.date = {};
-    if (startDate) (where.date as Record<string, Date>).gte = startDate;
-    if (endDate) (where.date as Record<string, Date>).lte = endDate;
-  }
-
-  if (network) where.network = network;
-  if (domain) where.domain = domain;
-
-  const data = await prisma.overview_Report.findMany({
-    where,
-    orderBy: { date: "desc" },
-    take: limit,
+  let data = await loadUnifiedRevenueReportRows({
+    userId,
+    scope,
+    startDate,
+    endDate,
+    network,
+    domain,
   });
+
+  if (limit !== undefined && limit > 0) {
+    data = data.slice(0, limit);
+  }
 
   // Calculate summary
   const summary = {
@@ -355,9 +595,29 @@ async function getDashboardSummaryImpl(
           },
         };
 
-  const [totalsAgg, byNetworkAgg, dailyData, topDomainsAgg] = await Promise.all([
-    // Total aggregates (1 query)
+  const yandexWhere = { ...whereClause, network: "yandex" as const };
+
+  const [
+    yandexTotals,
+    advertivTotals,
+    yhsTotals,
+    yandexDaily,
+    advertivDaily,
+    yhsDaily,
+    yandexTopDomains,
+    advertivTopDomains,
+    yhsTopDomains,
+  ] = await Promise.all([
     prisma.overview_Report.aggregate({
+      where: yandexWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
+    prisma.bidder_Advertiv.aggregate({
       where: whereClause,
       _sum: {
         grossRevenue: true,
@@ -366,28 +626,78 @@ async function getDashboardSummaryImpl(
         clicks: true,
       },
     }),
-    
-    // Group by network (1 query)
+    prisma.bidder_YHS.aggregate({
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+    }),
     prisma.overview_Report.groupBy({
-      by: ["network"],
-      where: whereClause,
+      by: ["date"],
+      where: yandexWhere,
       _sum: {
         grossRevenue: true,
         netRevenue: true,
         impressions: true,
         clicks: true,
       },
-    }),
-    
-    // Daily data (1 query)
-    prisma.overview_Report.findMany({
-      where: whereClause,
       orderBy: { date: "asc" },
     }),
-    
-    // Top domains (1 query)
+    prisma.bidder_Advertiv.groupBy({
+      by: ["date"],
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      orderBy: { date: "asc" },
+    }),
+    prisma.bidder_YHS.groupBy({
+      by: ["date"],
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+        impressions: true,
+        clicks: true,
+      },
+      orderBy: { date: "asc" },
+    }),
     prisma.overview_Report.groupBy({
       by: ["network", "domain"],
+      where: yandexWhere,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+      },
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+      take: 5,
+    }),
+    prisma.bidder_Advertiv.groupBy({
+      by: ["domain"],
+      where: whereClause,
+      _sum: {
+        grossRevenue: true,
+        netRevenue: true,
+      },
+      orderBy: {
+        _sum: {
+          grossRevenue: "desc",
+        },
+      },
+      take: 5,
+    }),
+    prisma.bidder_YHS.groupBy({
+      by: ["domain"],
       where: whereClause,
       _sum: {
         grossRevenue: true,
@@ -402,7 +712,6 @@ async function getDashboardSummaryImpl(
     }),
   ]);
 
-  // Aggregate daily data by date (combine all networks)
   const dailyMap = new Map<string, {
     date: string;
     grossRevenue: number;
@@ -411,69 +720,142 @@ async function getDashboardSummaryImpl(
     clicks: number;
   }>();
 
-  for (const record of dailyData) {
-    const dateKey = record.date.toISOString().split("T")[0];
-    const existing = dailyMap.get(dateKey);
-
-    if (existing) {
-      existing.grossRevenue += record.grossRevenue;
-      existing.netRevenue += record.netRevenue;
-      existing.impressions += record.impressions;
-      existing.clicks += record.clicks;
-    } else {
-      dailyMap.set(dateKey, {
-        date: dateKey,
-        grossRevenue: record.grossRevenue,
-        netRevenue: record.netRevenue,
-        impressions: record.impressions,
-        clicks: record.clicks,
-      });
+  const mergeDaily = (
+    rows: Array<{
+      date: Date;
+      _sum: {
+        grossRevenue: number | null;
+        netRevenue: number | null;
+        impressions: number | null;
+        clicks: number | null;
+      };
+    }>,
+  ) => {
+    for (const record of rows) {
+      const dateKey = record.date.toISOString().split("T")[0];
+      const existing = dailyMap.get(dateKey);
+      const g = record._sum.grossRevenue || 0;
+      const n = record._sum.netRevenue || 0;
+      const i = record._sum.impressions || 0;
+      const c = record._sum.clicks || 0;
+      if (existing) {
+        existing.grossRevenue += g;
+        existing.netRevenue += n;
+        existing.impressions += i;
+        existing.clicks += c;
+      } else {
+        dailyMap.set(dateKey, {
+          date: dateKey,
+          grossRevenue: g,
+          netRevenue: n,
+          impressions: i,
+          clicks: c,
+        });
+      }
     }
-  }
+  };
+
+  mergeDaily(yandexDaily);
+  mergeDaily(advertivDaily);
+  mergeDaily(yhsDaily);
 
   const dailyDataFormatted = Array.from(dailyMap.values()).sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // Format totals
-  const totalGross = totalsAgg._sum.grossRevenue || 0;
-  const totalImpressions = totalsAgg._sum.impressions || 0;
-  const totalClicks = totalsAgg._sum.clicks || 0;
+  const totalGross =
+    (yandexTotals._sum.grossRevenue || 0) +
+    (advertivTotals._sum.grossRevenue || 0) +
+    (yhsTotals._sum.grossRevenue || 0);
+  const totalNet =
+    (yandexTotals._sum.netRevenue || 0) +
+    (advertivTotals._sum.netRevenue || 0) +
+    (yhsTotals._sum.netRevenue || 0);
+  const totalImpressions =
+    (yandexTotals._sum.impressions || 0) +
+    (advertivTotals._sum.impressions || 0) +
+    (yhsTotals._sum.impressions || 0);
+  const totalClicks =
+    (yandexTotals._sum.clicks || 0) +
+    (advertivTotals._sum.clicks || 0) +
+    (yhsTotals._sum.clicks || 0);
 
   const totals = {
     grossRevenue: Math.round(totalGross * 100) / 100,
-    netRevenue: Math.round((totalsAgg._sum.netRevenue || 0) * 100) / 100,
+    netRevenue: Math.round(totalNet * 100) / 100,
     impressions: totalImpressions,
     clicks: totalClicks,
-    ctr: totalImpressions > 0 
-      ? Math.round((totalClicks / totalImpressions) * 10000) / 100 
+    ctr: totalImpressions > 0
+      ? Math.round((totalClicks / totalImpressions) * 10000) / 100
       : 0,
-    rpm: totalImpressions > 0 
-      ? Math.round((totalGross / totalImpressions) * 1000 * 100) / 100 
+    rpm: totalImpressions > 0
+      ? Math.round((totalGross / totalImpressions) * 1000 * 100) / 100
       : 0,
   };
 
-  // Format network breakdown
-  const byNetwork = byNetworkAgg.map((n) => ({
-    network: n.network || "unknown",
-    grossRevenue: Math.round((n._sum.grossRevenue || 0) * 100) / 100,
-    netRevenue: Math.round((n._sum.netRevenue || 0) * 100) / 100,
-    impressions: n._sum.impressions || 0,
-    clicks: n._sum.clicks || 0,
-  }));
+  const byNetwork = [
+    {
+      network: "yandex",
+      grossRevenue: Math.round((yandexTotals._sum.grossRevenue || 0) * 100) / 100,
+      netRevenue: Math.round((yandexTotals._sum.netRevenue || 0) * 100) / 100,
+      impressions: yandexTotals._sum.impressions || 0,
+      clicks: yandexTotals._sum.clicks || 0,
+    },
+    {
+      network: "advertiv",
+      grossRevenue: Math.round((advertivTotals._sum.grossRevenue || 0) * 100) / 100,
+      netRevenue: Math.round((advertivTotals._sum.netRevenue || 0) * 100) / 100,
+      impressions: advertivTotals._sum.impressions || 0,
+      clicks: advertivTotals._sum.clicks || 0,
+    },
+    {
+      network: "yhs",
+      grossRevenue: Math.round((yhsTotals._sum.grossRevenue || 0) * 100) / 100,
+      netRevenue: Math.round((yhsTotals._sum.netRevenue || 0) * 100) / 100,
+      impressions: yhsTotals._sum.impressions || 0,
+      clicks: yhsTotals._sum.clicks || 0,
+    },
+  ];
 
-  // Format top domains (apply Yahoo/YHS alias masking for display consistency)
-  const aliasMap = buildAdvertivAliasMap(
-    topDomainsAgg.map((d) => ({
-      network: d.network,
+  type TopAgg = {
+    network: string;
+    domain: string | null;
+    campaignId?: string | null;
+    gross: number;
+    net: number;
+  };
+
+  const topCombined: TopAgg[] = [
+    ...yandexTopDomains.map((d) => ({
+      network: d.network || "yandex",
       domain: d.domain,
+      gross: d._sum.grossRevenue || 0,
+      net: d._sum.netRevenue || 0,
     })),
-  );
+    ...advertivTopDomains.map((d) => ({
+      network: "advertiv",
+      domain: d.domain,
+      campaignId: null as string | null,
+      gross: d._sum.grossRevenue || 0,
+      net: d._sum.netRevenue || 0,
+    })),
+    ...yhsTopDomains.map((d) => ({
+      network: "yhs",
+      domain: d.domain,
+      gross: d._sum.grossRevenue || 0,
+      net: d._sum.netRevenue || 0,
+    })),
+  ];
+
+  topCombined.sort((a, b) => b.gross - a.gross);
+  const topDomainsAgg = topCombined.slice(0, 5);
 
   const topDomains = topDomainsAgg.map((d) => ({
-    domain: maskAdvertivDomain(d.network, d.domain, aliasMap) || "All Domains",
-    grossRevenue: d._sum.grossRevenue || 0,
-    netRevenue: d._sum.netRevenue || 0,
+    domain:
+      maskAdvertivDomain(d.network, d.domain, undefined, { campaignId: d.campaignId }) ||
+      "All Domains",
+    grossRevenue: d.gross,
+    netRevenue: d.net,
   }));
 
   return {
@@ -697,47 +1079,64 @@ export async function getRevenueComparison(
 
   const userFilter = scope === "all" ? {} : { userId };
 
-  // Fetch both periods
-  const [currentData, previousData] = await Promise.all([
+  const sumTriple = (
+    ya: { _sum: { grossRevenue: number | null; netRevenue: number | null; impressions: number | null; clicks: number | null } },
+    adv: typeof ya,
+    yhs: typeof ya,
+  ) => ({
+    grossRevenue:
+      (ya._sum.grossRevenue || 0) + (adv._sum.grossRevenue || 0) + (yhs._sum.grossRevenue || 0),
+    netRevenue:
+      (ya._sum.netRevenue || 0) + (adv._sum.netRevenue || 0) + (yhs._sum.netRevenue || 0),
+    impressions:
+      (ya._sum.impressions || 0) + (adv._sum.impressions || 0) + (yhs._sum.impressions || 0),
+    clicks: (ya._sum.clicks || 0) + (adv._sum.clicks || 0) + (yhs._sum.clicks || 0),
+  });
+
+  const [
+    curYa,
+    curAdv,
+    curYhs,
+    prevYa,
+    prevAdv,
+    prevYhs,
+  ] = await Promise.all([
     prisma.overview_Report.aggregate({
       where: {
         ...userFilter,
+        network: "yandex",
         date: { gte: currentStart, lte: currentEnd },
       },
-      _sum: {
-        grossRevenue: true,
-        netRevenue: true,
-        impressions: true,
-        clicks: true,
-      },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
+    }),
+    prisma.bidder_Advertiv.aggregate({
+      where: { ...userFilter, date: { gte: currentStart, lte: currentEnd } },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
+    }),
+    prisma.bidder_YHS.aggregate({
+      where: { ...userFilter, date: { gte: currentStart, lte: currentEnd } },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
     }),
     prisma.overview_Report.aggregate({
       where: {
         ...userFilter,
+        network: "yandex",
         date: { gte: lastMonthStart, lte: lastMonthEnd },
       },
-      _sum: {
-        grossRevenue: true,
-        netRevenue: true,
-        impressions: true,
-        clicks: true,
-      },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
+    }),
+    prisma.bidder_Advertiv.aggregate({
+      where: { ...userFilter, date: { gte: lastMonthStart, lte: lastMonthEnd } },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
+    }),
+    prisma.bidder_YHS.aggregate({
+      where: { ...userFilter, date: { gte: lastMonthStart, lte: lastMonthEnd } },
+      _sum: { grossRevenue: true, netRevenue: true, impressions: true, clicks: true },
     }),
   ]);
 
-  const current = {
-    grossRevenue: currentData._sum.grossRevenue || 0,
-    netRevenue: currentData._sum.netRevenue || 0,
-    impressions: currentData._sum.impressions || 0,
-    clicks: currentData._sum.clicks || 0,
-  };
-
-  const previous = {
-    grossRevenue: previousData._sum.grossRevenue || 0,
-    netRevenue: previousData._sum.netRevenue || 0,
-    impressions: previousData._sum.impressions || 0,
-    clicks: previousData._sum.clicks || 0,
-  };
+  const current = sumTriple(curYa, curAdv, curYhs);
+  const previous = sumTriple(prevYa, prevAdv, prevYhs);
 
   // Calculate changes
   const calcChange = (curr: number, prev: number) => ({
@@ -1260,104 +1659,6 @@ export async function getAdvertivRevenueSummary(
   };
 }
 
-export async function syncAdvertivToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
-  let synced = 0;
-  const errors: string[] = [];
-
-  try {
-    const advertivData = await prisma.bidder_Advertiv.findMany({
-      where: userId ? { userId } : undefined,
-    });
-
-    const grouped = new Map<string, {
-      userId: string;
-      date: Date;
-      domain: string | null;
-      grossRevenue: number;
-      netRevenue: number;
-      impressions: number;
-      clicks: number;
-    }>();
-
-    for (const record of advertivData) {
-      const key = `${record.userId}_${record.date.toISOString().split("T")[0]}_${record.domain || "all"}`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.grossRevenue += record.grossRevenue;
-        existing.netRevenue += record.netRevenue;
-        existing.impressions += record.impressions;
-        existing.clicks += record.clicks;
-      } else {
-        grouped.set(key, {
-          userId: record.userId,
-          date: record.date,
-          domain: record.domain,
-          grossRevenue: record.grossRevenue,
-          netRevenue: record.netRevenue,
-          impressions: record.impressions,
-          clicks: record.clicks,
-        });
-      }
-    }
-
-    for (const [, data] of grouped) {
-      try {
-        const ctr = data.impressions > 0
-          ? Math.round((data.clicks / data.impressions) * 10000) / 100
-          : null;
-        const rpm = data.impressions > 0
-          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100
-          : null;
-
-        const recordData = {
-          grossRevenue: data.grossRevenue,
-          netRevenue: data.netRevenue,
-          impressions: data.impressions,
-          clicks: data.clicks,
-          ctr,
-          rpm,
-        };
-
-        const existing = await prisma.overview_Report.findFirst({
-          where: {
-            date: data.date,
-            network: "advertiv",
-            domain: data.domain,
-            userId: data.userId,
-          },
-        });
-
-        if (existing) {
-          await prisma.overview_Report.update({
-            where: { id: existing.id },
-            data: recordData,
-          });
-        } else {
-          await prisma.overview_Report.create({
-            data: {
-              date: data.date,
-              network: "advertiv",
-              domain: data.domain,
-              currency: "USD",
-              userId: data.userId,
-              ...recordData,
-            },
-          });
-        }
-
-        synced++;
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
-      }
-    }
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Unknown error");
-  }
-
-  return { synced, errors };
-}
-
 // ============================================
 // SYNC STATUS FUNCTIONS
 // ============================================
@@ -1450,7 +1751,7 @@ export async function getSyncStatus(userId?: string): Promise<{
           if (isMissingDbObjectError(error)) return 0;
           throw error;
         }),
-        prisma.overview_Report.count({ where }),
+        prisma.overview_Report.count({ where: { ...where, network: "yandex" } }),
       ]);
 
       return {
@@ -1669,108 +1970,3 @@ export async function getYhsRevenueSummary(
     recordCount: result._count,
   };
 }
-
-/**
- * Sync YHS bidder table into Overview_Report.
- * Overview uses monetized_searches (stored as impressions) as its impressions basis.
- */
-export async function syncYhsToOverviewReport(userId: string | null = null): Promise<{ synced: number; errors: string[] }> {
-  let synced = 0;
-  const errors: string[] = [];
-
-  try {
-    const yhsData = await prisma.bidder_YHS.findMany({
-      where: userId ? { userId } : undefined,
-    });
-
-    const grouped = new Map<string, {
-      userId: string;
-      date: Date;
-      domain: string | null;
-      grossRevenue: number;
-      netRevenue: number;
-      impressions: number;
-      clicks: number;
-    }>();
-
-    for (const record of yhsData) {
-      const key = `${record.userId}_${record.date.toISOString().split("T")[0]}_${record.domain || "all"}`;
-
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.grossRevenue += record.grossRevenue;
-        existing.netRevenue += record.netRevenue;
-        existing.impressions += record.impressions;
-        existing.clicks += record.clicks;
-      } else {
-        grouped.set(key, {
-          userId: record.userId,
-          date: record.date,
-          domain: record.domain,
-          grossRevenue: record.grossRevenue,
-          netRevenue: record.netRevenue,
-          impressions: record.impressions,
-          clicks: record.clicks,
-        });
-      }
-    }
-
-    for (const [, data] of grouped) {
-      try {
-        const ctr = data.impressions > 0
-          ? Math.round((data.clicks / data.impressions) * 10000) / 100
-          : null;
-
-        const rpm = data.impressions > 0
-          ? Math.round((data.grossRevenue / data.impressions) * 1000 * 100) / 100
-          : null;
-
-        const recordData = {
-          grossRevenue: data.grossRevenue,
-          netRevenue: data.netRevenue,
-          impressions: data.impressions,
-          clicks: data.clicks,
-          ctr,
-          rpm,
-        };
-
-        const existing = await prisma.overview_Report.findFirst({
-          where: {
-            date: data.date,
-            network: "yhs",
-            domain: data.domain,
-            userId: data.userId,
-          },
-        });
-
-        if (existing) {
-          await prisma.overview_Report.update({
-            where: { id: existing.id },
-            data: recordData,
-          });
-        } else {
-          await prisma.overview_Report.create({
-            data: {
-              date: data.date,
-              network: "yhs",
-              domain: data.domain,
-              currency: "USD",
-              userId: data.userId,
-              ...recordData,
-            },
-          });
-        }
-
-        synced++;
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        errors.push(`Failed to sync overview for ${data.date}: ${errorMsg}`);
-      }
-    }
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Unknown error");
-  }
-
-  return { synced, errors };
-}
-

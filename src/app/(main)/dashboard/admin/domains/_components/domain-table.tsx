@@ -8,7 +8,7 @@
  * One domain = One user
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -32,7 +32,7 @@ import {
 import { Pencil, Check, X, Loader2, User, Users, CheckSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getNetworkColors, getNetworkName } from "@/lib/ad-networks";
-import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
+import { maskAdvertivDomain } from "@/lib/domain-alias";
 
 interface DomainAssignment {
   id: string;
@@ -46,6 +46,12 @@ interface DomainAssignment {
   userEmail: string;
   createdAt: Date;
   updatedAt: Date;
+  /** Display-only: Partner ID (YHS / Yahoo when known from revenue rows) */
+  partnerId: string;
+  /** Display-only: Campaign ID (Yahoo when known) */
+  campaignId: string;
+  /** Display-only: Link ID (YHS assignment key) */
+  linkId: string;
 }
 
 interface UserOption {
@@ -216,17 +222,6 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
 
   const isAllSelected = assignments.length > 0 && selectedIds.size === assignments.length;
   const isSomeSelected = selectedIds.size > 0 && selectedIds.size < assignments.length;
-  const aliasMap = useMemo(
-    () =>
-      buildAdvertivAliasMap(
-        assignments.map((a) => ({
-          network: a.network,
-          domain: a.domain,
-        })),
-      ),
-    [assignments],
-  );
-
   return (
     <Card>
       <CardHeader>
@@ -304,7 +299,7 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
         </div>
       )}
 
-      <CardContent>
+      <CardContent className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -320,6 +315,9 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
               </TableHead>
               <TableHead>Domain</TableHead>
               <TableHead>Raw ID</TableHead>
+              <TableHead className="whitespace-nowrap">Partner ID</TableHead>
+              <TableHead className="whitespace-nowrap">Campaign ID</TableHead>
+              <TableHead className="whitespace-nowrap">Link ID</TableHead>
               <TableHead>Network</TableHead>
               <TableHead>Assigned To</TableHead>
               <TableHead className="text-center">RevShare %</TableHead>
@@ -337,17 +335,32 @@ export function DomainTable({ assignments, users }: DomainTableProps) {
                   <Checkbox
                     checked={selectedIds.has(assignment.id)}
                     onCheckedChange={() => toggleSelection(assignment.id)}
-                    aria-label={`Select ${maskAdvertivDomain(assignment.network, assignment.domain, aliasMap) || assignment.domain}`}
+                    aria-label={`Select ${maskAdvertivDomain(assignment.network, assignment.domain, undefined, {
+                      campaignId: assignment.campaignId === "N/A" ? null : assignment.campaignId,
+                    }) || assignment.domain}`}
                   />
                 </TableCell>
                 <TableCell className="font-medium">
-                  {maskAdvertivDomain(assignment.network, assignment.domain, aliasMap) || assignment.domain}
+                  {maskAdvertivDomain(assignment.network, assignment.domain, undefined, {
+                    campaignId: assignment.campaignId === "N/A" ? null : assignment.campaignId,
+                  }) || assignment.domain}
                 </TableCell>
                 <TableCell
                   className="max-w-[240px] font-mono text-xs text-muted-foreground break-all"
                   title={assignment.domain}
                 >
                   {assignment.domain}
+                </TableCell>
+                <TableCell className="max-w-[140px] font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  <span className="block truncate" title={assignment.partnerId}>
+                    {assignment.partnerId}
+                  </span>
+                </TableCell>
+                <TableCell className="max-w-[160px] font-mono text-xs text-muted-foreground break-all">
+                  <span title={assignment.campaignId}>{assignment.campaignId}</span>
+                </TableCell>
+                <TableCell className="max-w-[160px] font-mono text-xs text-muted-foreground break-all">
+                  <span title={assignment.linkId}>{assignment.linkId}</span>
                 </TableCell>
                 <TableCell>
                   <Badge className={getNetworkColors(assignment.network).badge}>

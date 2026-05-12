@@ -13,6 +13,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/roles";
 import { DomainTable } from "./_components/domain-table";
+import {
+  fetchFeedIdEnrichment,
+  getAssignmentFeedIds,
+} from "@/lib/domain-assignment-feed-ids";
 
 export const metadata: Metadata = {
   title: "RevEngine Media - Domain Management",
@@ -56,20 +60,30 @@ export default async function DomainsPage() {
     orderBy: { name: "asc" },
   });
 
+  const enrichment = await fetchFeedIdEnrichment(
+    assignments.map((a) => ({ network: a.network, domain: a.domain })),
+  );
+
   // Format assignments for the table
-  const formattedAssignments = assignments.map((a) => ({
-    id: a.id,
-    domain: a.domain,
-    network: a.network,
-    revShare: a.revShare,
-    isActive: a.isActive,
-    notes: a.notes,
-    userId: a.userId,
-    userName: a.user.name,
-    userEmail: a.user.email,
-    createdAt: a.createdAt,
-    updatedAt: a.updatedAt,
-  }));
+  const formattedAssignments = assignments.map((a) => {
+    const ids = getAssignmentFeedIds(a.network, a.domain, enrichment);
+    return {
+      id: a.id,
+      domain: a.domain,
+      network: a.network,
+      revShare: a.revShare,
+      isActive: a.isActive,
+      notes: a.notes,
+      userId: a.userId,
+      userName: a.user.name,
+      userEmail: a.user.email,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      partnerId: ids.partnerId,
+      campaignId: ids.campaignId,
+      linkId: ids.linkId,
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6 p-6">

@@ -11,7 +11,7 @@ import { yhsClient, createYhsClient } from "@/lib/yhs";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isYhsCredentials } from "@/lib/encryption";
 import { syncLimiter, getClientIp } from "@/lib/rate-limit";
-import { getYhsRevenueSummary, saveYhsRevenue, syncYhsToOverviewReport } from "@/lib/revenue-db";
+import { getYhsRevenueSummary, saveYhsRevenue } from "@/lib/revenue-db";
 
 export async function POST(request: Request) {
   try {
@@ -151,7 +151,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const overviewResult = await syncYhsToOverviewReport(userIsAdmin ? null : userId);
     const summary = await getYhsRevenueSummary(userId);
 
     return NextResponse.json({
@@ -173,10 +172,6 @@ export async function POST(request: Request) {
         totalImpressions: summary.totalImpressions,
         totalClicks: summary.totalClicks,
         recordsInDb: summary.recordCount,
-      },
-      overview: {
-        synced: overviewResult.synced,
-        errors: overviewResult.errors.length,
       },
     });
   } catch (error) {

@@ -205,7 +205,7 @@ model Domain_Assignment {
   @@index([accountId])
 }
 
-// Aggregated overview from all ad networks
+// Yandex rollups for dashboard/overview (Yahoo/YHS use Bidder_Advertiv / Bidder_YHS only)
 model Overview_Report {
   id            String   @id @default(cuid())
   

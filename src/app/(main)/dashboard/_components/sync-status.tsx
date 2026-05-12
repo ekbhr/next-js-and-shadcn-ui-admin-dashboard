@@ -59,7 +59,8 @@ function getSyncHealthStatus(date: Date | null): "healthy" | "warning" | "error"
 
 export function SyncStatus({ lastSync, recordCounts, isAdmin = false }: SyncStatusProps) {
   const overallStatus = getSyncHealthStatus(lastSync.overall);
-  const hasData = recordCounts.overview > 0;
+  const hasData =
+    recordCounts.yandex + recordCounts.advertiv + recordCounts.yhs + recordCounts.overview > 0;
 
   // Publisher-friendly view
   if (!isAdmin) {
@@ -153,7 +154,7 @@ export function SyncStatus({ lastSync, recordCounts, isAdmin = false }: SyncStat
             <div className="flex items-center gap-1.5">
               <Database className="h-3 w-3 text-muted-foreground" />
               <span className="text-muted-foreground">
-                {recordCounts.overview.toLocaleString()} total
+                {recordCounts.overview.toLocaleString()} Yandex rollups (Overview_Report)
               </span>
             </div>
           </div>

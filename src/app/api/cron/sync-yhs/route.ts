@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { yhsClient, createYhsClient } from "@/lib/yhs";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isYhsCredentials } from "@/lib/encryption";
-import { saveYhsRevenue, syncYhsToOverviewReport } from "@/lib/revenue-db";
+import { saveYhsRevenue } from "@/lib/revenue-db";
 import { notifySyncFailure } from "@/lib/notifications";
 import { updateLastSync } from "@/lib/settings";
 
@@ -154,7 +154,6 @@ export async function GET(request: Request) {
       }
     }
 
-    const overviewResult = await syncYhsToOverviewReport(null);
     await updateLastSync("yhs");
 
     if (totalErrors > 0) {
@@ -176,7 +175,6 @@ export async function GET(request: Request) {
         recordsSaved: totalSaved,
         recordsUpdated: totalUpdated,
         recordsSkipped: totalSkipped,
-        overviewSynced: overviewResult.synced,
         errors: totalErrors,
       },
     });

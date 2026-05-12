@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { loadUnifiedRevenueReportRows } from "@/lib/revenue-db";
 import { isAdmin } from "@/lib/roles";
 import { AdminReportTable } from "./_components/admin-report-table";
 import { AdminReportSummary } from "./_components/admin-report-summary";
@@ -34,24 +35,26 @@ export default async function AdminReportPage() {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 31);
 
-  // Get all overview reports with user info
-  const reports = await prisma.overview_Report.findMany({
-    where: {
-      date: {
-        gte: startDate,
-        lte: endDate,
-      },
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: { date: "desc" },
+  const unifiedRows = await loadUnifiedRevenueReportRows({
+    userId: session.user.id,
+    scope: "all",
+    startDate,
+    endDate,
+  });
+
+  const userIds = [...new Set(unifiedRows.map((r) => r.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true },
+  });
+  const userById = new Map(users.map((u) => [u.id, u]));
+
+  const reports = unifiedRows.map((r) => {
+    const user = userById.get(r.userId);
+    return {
+      ...r,
+      user: user ?? { id: r.userId, name: null, email: "unknown@user" },
+    };
   });
 
   // Calculate totals per user

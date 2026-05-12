@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { advertivClient, createAdvertivClient } from "@/lib/advertiv";
-import { getAdvertivRevenueSummary, saveAdvertivRevenue, syncAdvertivToOverviewReport } from "@/lib/revenue-db";
+import { getAdvertivRevenueSummary, saveAdvertivRevenue } from "@/lib/revenue-db";
 import { isAdmin } from "@/lib/roles";
 import { getActiveAccountsWithCredentials } from "@/lib/network-accounts";
 import { isAdvertivCredentials } from "@/lib/encryption";
@@ -168,7 +168,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const overviewResult = await syncAdvertivToOverviewReport(userIsAdmin ? null : userId);
     await updateLastSync("advertiv");
     const summary = await getAdvertivRevenueSummary(userId);
 
@@ -191,10 +190,6 @@ export async function POST(request: Request) {
         totalImpressions: summary.totalImpressions,
         totalClicks: summary.totalClicks,
         recordsInDb: summary.recordCount,
-      },
-      overview: {
-        synced: overviewResult.synced,
-        errors: overviewResult.errors.length,
       },
     });
   } catch (error) {

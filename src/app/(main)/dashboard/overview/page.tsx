@@ -17,7 +17,7 @@ import { getOverviewReport } from "@/lib/revenue-db";
 import { canViewGrossRevenue, isAdmin } from "@/lib/roles";
 import { RevenueDataTable } from "./_components/revenue-data-table";
 import { OverviewFilters } from "./_components/overview-filters";
-import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
+import { maskAdvertivDomain } from "@/lib/domain-alias";
 
 interface PageProps {
   searchParams: Promise<{
@@ -55,10 +55,11 @@ export default async function OverviewPage({ searchParams }: PageProps) {
     scope: dataScope,
   });
 
-  const aliasMap = buildAdvertivAliasMap(data);
   const maskedData = data.map((row) => ({
     ...row,
-    domain: maskAdvertivDomain(row.network, row.domain, aliasMap),
+    domain: maskAdvertivDomain(row.network, row.domain, undefined, {
+      campaignId: row.campaignId,
+    }),
   }));
 
   // Get unique networks for filter dropdown

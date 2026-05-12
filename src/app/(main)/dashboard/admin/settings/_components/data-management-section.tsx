@@ -208,9 +208,9 @@ export function DataManagementSection({ recordCounts, lastDomainSync }: DataMana
             <p className="text-xs text-muted-foreground">records</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-muted/50">
-            <Badge variant="secondary">Overview</Badge>
+            <Badge variant="secondary">Yandex rollups</Badge>
             <p className="text-2xl font-bold mt-2">{recordCounts.overview.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">records</p>
+            <p className="text-xs text-muted-foreground">Overview_Report</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-muted/50">
             <Badge variant="outline">Domains</Badge>

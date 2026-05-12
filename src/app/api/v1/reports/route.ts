@@ -17,8 +17,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey, checkRateLimit } from "@/lib/api-keys";
-import { prisma } from "@/lib/prisma";
-import { buildAdvertivAliasMap, maskAdvertivDomain } from "@/lib/domain-alias";
+import { countUnifiedRevenueReportRows, loadUnifiedRevenueReportRows } from "@/lib/revenue-db";
+import { maskAdvertivDomain } from "@/lib/domain-alias";
 
 export async function GET(request: NextRequest) {
   try {
@@ -116,44 +116,30 @@ export async function GET(request: NextRequest) {
     // ============================================
     const userId = validation.userId!;
 
-    const where = {
+    const loadParams = {
       userId,
-      date: {
-        gte: startDate,
-        lte: endDate,
-      },
-      ...(domain && { domain }),
+      scope: "user" as const,
+      startDate,
+      endDate,
+      domain,
     };
 
-    const [data, totalCount] = await Promise.all([
-      prisma.overview_Report.findMany({
-        where,
-        select: {
-          date: true,
-          network: true,
-          domain: true,
-          netRevenue: true,
-          impressions: true,
-          clicks: true,
-          ctr: true,
-          rpm: true,
-          currency: true,
-        },
-        orderBy: { date: "desc" },
-        take: limit,
-        skip: offset,
-      }),
-      prisma.overview_Report.count({ where }),
+    const [allRows, totalCount] = await Promise.all([
+      loadUnifiedRevenueReportRows(loadParams),
+      countUnifiedRevenueReportRows(loadParams),
     ]);
+
+    const pageRows = allRows.slice(offset, offset + limit);
 
     // ============================================
     // Format Response
     // ============================================
-    
-    const aliasMap = buildAdvertivAliasMap(data);
-    const maskedData = data.map((row) => ({
+
+    const maskedData = pageRows.map((row) => ({
       ...row,
-      domain: maskAdvertivDomain(row.network, row.domain, aliasMap),
+      domain: maskAdvertivDomain(row.network, row.domain, undefined, {
+        campaignId: row.campaignId,
+      }),
     }));
 
     // CSV Export
@@ -211,7 +197,7 @@ export async function GET(request: NextRequest) {
           total: totalCount,
           limit,
           offset,
-          hasMore: offset + data.length < totalCount,
+          hasMore: offset + pageRows.length < totalCount,
         },
         filters: {
           startDate: startDate.toISOString().split("T")[0],

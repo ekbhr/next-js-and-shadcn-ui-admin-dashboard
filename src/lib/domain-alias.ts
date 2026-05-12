@@ -1,52 +1,52 @@
 /**
- * Domain alias helpers for display masking.
- *
- * For Advertiv/Yahoo and YHS, we mask raw ids as:
- * - advertiv -> YH_Feed_N
- * - yhs -> YHS_Feed_N
- * while keeping original values in storage and internal logic.
+ * Domain display labels for Yahoo (Advertiv) and YHS feeds.
+ * Raw assignment keys stay in storage; UI uses prefixed labels.
  */
 
-export function buildAdvertivAliasMap(
-  rows: Array<{ network?: string | null; domain?: string | null }>
-): Map<string, string> {
-  const aliasMap = new Map<string, string>();
+const NA = "N/A";
 
-  const advertivDomains = Array.from(
-    new Set(
-      rows
-        .filter((row) => row.network === "advertiv" && row.domain)
-        .map((row) => String(row.domain).trim())
-        .filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const yhsDomains = Array.from(
-    new Set(
-      rows
-        .filter((row) => row.network === "yhs" && row.domain)
-        .map((row) => String(row.domain).trim())
-        .filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  advertivDomains.forEach((domain, index) => {
-    aliasMap.set(`advertiv:${domain}`, `YH_Feed_${index + 1}`);
-  });
-
-  yhsDomains.forEach((domain, index) => {
-    aliasMap.set(`yhs:${domain}`, `YHS_Feed_${index + 1}`);
-  });
-
-  return aliasMap;
+function segment(value: string | null | undefined): string {
+  if (value === null || value === undefined) return NA;
+  const t = String(value).trim();
+  if (t === "" || t === NA) return NA;
+  return t;
 }
 
+/** Yahoo feed: YH_Feed_<SubId>_<CampaignId> */
+export function formatYahooFeedDomainLabel(
+  subId: string | null | undefined,
+  campaignId?: string | null,
+): string | null {
+  if (!subId?.trim()) return null;
+  return `YH_Feed_${segment(subId)}_${segment(campaignId)}`;
+}
+
+/** YHS feed: YHS_Feed_<LinkId> */
+export function formatYhsFeedDomainLabel(linkId: string | null | undefined): string | null {
+  if (!linkId?.trim()) return null;
+  return `YHS_Feed_${segment(linkId)}`;
+}
+
+export type MaskAdvertivDomainOptions = {
+  campaignId?: string | null;
+};
+
+/**
+ * Map stored domain key to display label for Yahoo/YHS; other networks pass through.
+ * @deprecated Third argument (`aliasMap`) is ignored; kept for call-site compatibility.
+ */
 export function maskAdvertivDomain(
   network: string | null | undefined,
   domain: string | null | undefined,
-  aliasMap: Map<string, string>
+  _aliasMap?: Map<string, string>,
+  options?: MaskAdvertivDomainOptions,
 ): string | null {
   if (!domain) return null;
-  if (network !== "advertiv" && network !== "yhs") return domain;
-  return aliasMap.get(`${network}:${domain}`) || domain;
+  if (network === "advertiv") {
+    return formatYahooFeedDomainLabel(domain, options?.campaignId);
+  }
+  if (network === "yhs") {
+    return formatYhsFeedDomainLabel(domain);
+  }
+  return domain;
 }

@@ -92,34 +92,108 @@ export async function GET(request: NextRequest) {
     // ============================================
     const userId = validation.userId!;
 
-    const where = {
+    const whereClause = {
       userId,
       date: {
         gte: startDate,
         lte: endDate,
       },
     };
+    const yandexWhere = { ...whereClause, network: "yandex" as const };
+
+    const mergeDailyMap = (
+      rows: Array<{
+        date: Date;
+        _sum: { netRevenue: number | null; impressions: number | null; clicks: number | null };
+      }>,
+      into: Map<string, { revenue: number; impressions: number; clicks: number }>,
+    ) => {
+      for (const d of rows) {
+        const key = d.date.toISOString().split("T")[0];
+        const prev = into.get(key);
+        const rev = d._sum.netRevenue || 0;
+        const imp = d._sum.impressions || 0;
+        const clk = d._sum.clicks || 0;
+        if (prev) {
+          prev.revenue += rev;
+          prev.impressions += imp;
+          prev.clicks += clk;
+        } else {
+          into.set(key, { revenue: rev, impressions: imp, clicks: clk });
+        }
+      }
+    };
+
+    const mergeDomainMap = (
+      rows: Array<{
+        domain: string | null;
+        _sum: { netRevenue: number | null; impressions: number | null; clicks: number | null };
+      }>,
+      into: Map<string, { revenue: number; impressions: number; clicks: number }>,
+    ) => {
+      for (const d of rows) {
+        const key = d.domain || "Unknown";
+        const prev = into.get(key);
+        const rev = d._sum.netRevenue || 0;
+        const imp = d._sum.impressions || 0;
+        const clk = d._sum.clicks || 0;
+        if (prev) {
+          prev.revenue += rev;
+          prev.impressions += imp;
+          prev.clicks += clk;
+        } else {
+          into.set(key, { revenue: rev, impressions: imp, clicks: clk });
+        }
+      }
+    };
 
     // Grand total (no grouping)
     if (!groupBy) {
-      const totals = await prisma.overview_Report.aggregate({
-        where,
-        _sum: {
-          netRevenue: true,
-          impressions: true,
-          clicks: true,
-        },
-        _count: true,
-      });
+      const [ya, adv, yhs] = await Promise.all([
+        prisma.overview_Report.aggregate({
+          where: yandexWhere,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          _count: true,
+        }),
+        prisma.bidder_Advertiv.aggregate({
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          _count: true,
+        }),
+        prisma.bidder_YHS.aggregate({
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          _count: true,
+        }),
+      ]);
+
+      const revenue =
+        (ya._sum.netRevenue || 0) + (adv._sum.netRevenue || 0) + (yhs._sum.netRevenue || 0);
+      const impressions =
+        (ya._sum.impressions || 0) + (adv._sum.impressions || 0) + (yhs._sum.impressions || 0);
+      const clicks =
+        (ya._sum.clicks || 0) + (adv._sum.clicks || 0) + (yhs._sum.clicks || 0);
 
       return NextResponse.json(
         {
           success: true,
           summary: {
-            revenue: Math.round((totals._sum.netRevenue || 0) * 100) / 100,
-            impressions: totals._sum.impressions || 0,
-            clicks: totals._sum.clicks || 0,
-            recordCount: totals._count,
+            revenue: Math.round(revenue * 100) / 100,
+            impressions,
+            clicks,
+            recordCount: ya._count + adv._count + yhs._count,
           },
           period: {
             startDate: startDate.toISOString().split("T")[0],
@@ -132,26 +206,57 @@ export async function GET(request: NextRequest) {
 
     // Group by day
     if (groupBy === "day") {
-      const dailyData = await prisma.overview_Report.groupBy({
-        by: ["date"],
-        where,
-        _sum: {
-          netRevenue: true,
-          impressions: true,
-          clicks: true,
-        },
-        orderBy: { date: "asc" },
-      });
+      const [yandexDaily, advertivDaily, yhsDaily] = await Promise.all([
+        prisma.overview_Report.groupBy({
+          by: ["date"],
+          where: yandexWhere,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          orderBy: { date: "asc" },
+        }),
+        prisma.bidder_Advertiv.groupBy({
+          by: ["date"],
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          orderBy: { date: "asc" },
+        }),
+        prisma.bidder_YHS.groupBy({
+          by: ["date"],
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+          orderBy: { date: "asc" },
+        }),
+      ]);
+
+      const dailyMap = new Map<string, { revenue: number; impressions: number; clicks: number }>();
+      mergeDailyMap(yandexDaily, dailyMap);
+      mergeDailyMap(advertivDaily, dailyMap);
+      mergeDailyMap(yhsDaily, dailyMap);
+
+      const data = Array.from(dailyMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({
+          date,
+          revenue: Math.round(v.revenue * 100) / 100,
+          impressions: v.impressions,
+          clicks: v.clicks,
+        }));
 
       return NextResponse.json(
         {
           success: true,
-          data: dailyData.map(d => ({
-            date: d.date.toISOString().split("T")[0],
-            revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
-            impressions: d._sum.impressions || 0,
-            clicks: d._sum.clicks || 0,
-          })),
+          data,
           period: {
             startDate: startDate.toISOString().split("T")[0],
             endDate: endDate.toISOString().split("T")[0],
@@ -163,28 +268,54 @@ export async function GET(request: NextRequest) {
 
     // Group by domain
     if (groupBy === "domain") {
-      const domainData = await prisma.overview_Report.groupBy({
-        by: ["domain"],
-        where,
-        _sum: {
-          netRevenue: true,
-          impressions: true,
-          clicks: true,
-        },
-        orderBy: {
-          _sum: { netRevenue: "desc" },
-        },
-      });
+      const [yandexDomain, advertivDomain, yhsDomain] = await Promise.all([
+        prisma.overview_Report.groupBy({
+          by: ["domain"],
+          where: yandexWhere,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+        prisma.bidder_Advertiv.groupBy({
+          by: ["domain"],
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+        prisma.bidder_YHS.groupBy({
+          by: ["domain"],
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+      ]);
+
+      const domainMap = new Map<string, { revenue: number; impressions: number; clicks: number }>();
+      mergeDomainMap(yandexDomain, domainMap);
+      mergeDomainMap(advertivDomain, domainMap);
+      mergeDomainMap(yhsDomain, domainMap);
+
+      const data = Array.from(domainMap.entries())
+        .map(([domainKey, v]) => ({
+          domain: domainKey,
+          revenue: Math.round(v.revenue * 100) / 100,
+          impressions: v.impressions,
+          clicks: v.clicks,
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
 
       return NextResponse.json(
         {
           success: true,
-          data: domainData.map(d => ({
-            domain: d.domain || "Unknown",
-            revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
-            impressions: d._sum.impressions || 0,
-            clicks: d._sum.clicks || 0,
-          })),
+          data,
           period: {
             startDate: startDate.toISOString().split("T")[0],
             endDate: endDate.toISOString().split("T")[0],
@@ -196,28 +327,58 @@ export async function GET(request: NextRequest) {
 
     // Group by network
     if (groupBy === "network") {
-      const networkData = await prisma.overview_Report.groupBy({
-        by: ["network"],
-        where,
-        _sum: {
-          netRevenue: true,
-          impressions: true,
-          clicks: true,
+      const [ya, adv, yhs] = await Promise.all([
+        prisma.overview_Report.aggregate({
+          where: yandexWhere,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+        prisma.bidder_Advertiv.aggregate({
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+        prisma.bidder_YHS.aggregate({
+          where: whereClause,
+          _sum: {
+            netRevenue: true,
+            impressions: true,
+            clicks: true,
+          },
+        }),
+      ]);
+
+      const networkData = [
+        {
+          network: "yandex",
+          revenue: Math.round((ya._sum.netRevenue || 0) * 100) / 100,
+          impressions: ya._sum.impressions || 0,
+          clicks: ya._sum.clicks || 0,
         },
-        orderBy: {
-          _sum: { netRevenue: "desc" },
+        {
+          network: "advertiv",
+          revenue: Math.round((adv._sum.netRevenue || 0) * 100) / 100,
+          impressions: adv._sum.impressions || 0,
+          clicks: adv._sum.clicks || 0,
         },
-      });
+        {
+          network: "yhs",
+          revenue: Math.round((yhs._sum.netRevenue || 0) * 100) / 100,
+          impressions: yhs._sum.impressions || 0,
+          clicks: yhs._sum.clicks || 0,
+        },
+      ].sort((a, b) => b.revenue - a.revenue);
 
       return NextResponse.json(
         {
           success: true,
-          data: networkData.map(d => ({
-            network: d.network,
-            revenue: Math.round((d._sum.netRevenue || 0) * 100) / 100,
-            impressions: d._sum.impressions || 0,
-            clicks: d._sum.clicks || 0,
-          })),
+          data: networkData,
           period: {
             startDate: startDate.toISOString().split("T")[0],
             endDate: endDate.toISOString().split("T")[0],
